@@ -126,12 +126,13 @@
                     <ColumnDefinition Width="52"/>
                     <ColumnDefinition Width="96"/>
                     <ColumnDefinition Width="72"/>
-                    <ColumnDefinition Width="88"/>
-                    <ColumnDefinition Width="88"/>
-                    <ColumnDefinition Width="88"/>
                     <ColumnDefinition Width="76"/>
                     <ColumnDefinition Width="76"/>
                     <ColumnDefinition Width="76"/>
+                    <ColumnDefinition Width="76"/>
+                    <ColumnDefinition Width="72"/>
+                    <ColumnDefinition Width="72"/>
+                    <ColumnDefinition Width="72"/>
                     <ColumnDefinition Width="72"/>
                 </Grid.ColumnDefinitions>
 
@@ -155,11 +156,12 @@
                 </StackPanel>
                 <ContentPresenter Grid.Column="5" Content="{Binding Material}" ContentTemplate="{StaticResource MilestoneTemplate}"/>
                 <ContentPresenter Grid.Column="6" Content="{Binding Wiring}" ContentTemplate="{StaticResource MilestoneTemplate}"/>
-                <ContentPresenter Grid.Column="7" Content="{Binding Delivery}" ContentTemplate="{StaticResource MilestoneTemplate}"/>
-                <TextBlock Grid.Column="8" Text="{Binding InnerWiring}" Style="{StaticResource CellText}"/>
-                <TextBlock Grid.Column="9" Text="{Binding OuterWiring}" Style="{StaticResource CellText}"/>
-                <TextBlock Grid.Column="10" Text="{Binding Consumables}" Style="{StaticResource CellText}"/>
-                <Border x:Name="Pill" Grid.Column="11" CornerRadius="9" Padding="9,3" HorizontalAlignment="Left" VerticalAlignment="Center"
+                <ContentPresenter Grid.Column="7" Content="{Binding Dispatch}" ContentTemplate="{StaticResource MilestoneTemplate}"/>
+                <ContentPresenter Grid.Column="8" Content="{Binding Delivery}" ContentTemplate="{StaticResource MilestoneTemplate}"/>
+                <TextBlock Grid.Column="9" Text="{Binding InnerWiring}" Style="{StaticResource CellText}"/>
+                <TextBlock Grid.Column="10" Text="{Binding OuterWiring}" Style="{StaticResource CellText}"/>
+                <TextBlock Grid.Column="11" Text="{Binding Consumables}" Style="{StaticResource CellText}"/>
+                <Border x:Name="Pill" Grid.Column="12" CornerRadius="9" Padding="9,3" HorizontalAlignment="Left" VerticalAlignment="Center"
                         Background="{DynamicResource AccentSoftBrush}">
                     <TextBlock x:Name="PillText" Text="{Binding StatusText}" FontSize="12" FontWeight="SemiBold"
                                Foreground="{DynamicResource AccentTextBrush}"/>
@@ -344,6 +346,7 @@
                             <ComboBoxItem Content="依預計交期" Tag="DeliveryPlan"/>
                             <ComboBoxItem Content="依預計材料入場" Tag="MaterialPlan"/>
                             <ComboBoxItem Content="依預計配電日期" Tag="WiringPlan"/>
+                            <ComboBoxItem Content="依預計出料日期" Tag="DispatchPlan"/>
                             <ComboBoxItem Content="依工令" Tag="WorkOrder"/>
                             <ComboBoxItem Content="依客戶" Tag="Customer"/>
                         </ComboBox>
@@ -393,12 +396,13 @@
                                         <ColumnDefinition Width="52"/>
                                         <ColumnDefinition Width="96"/>
                                         <ColumnDefinition Width="72"/>
-                                        <ColumnDefinition Width="88"/>
-                                        <ColumnDefinition Width="88"/>
-                                        <ColumnDefinition Width="88"/>
                                         <ColumnDefinition Width="76"/>
                                         <ColumnDefinition Width="76"/>
                                         <ColumnDefinition Width="76"/>
+                                        <ColumnDefinition Width="76"/>
+                                        <ColumnDefinition Width="72"/>
+                                        <ColumnDefinition Width="72"/>
+                                        <ColumnDefinition Width="72"/>
                                         <ColumnDefinition Width="72"/>
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Grid.Column="0" Text="工令" Style="{StaticResource ColumnHeader}"/>
@@ -408,11 +412,12 @@
                                     <TextBlock Grid.Column="4" Text="CE / TS" Style="{StaticResource ColumnHeader}"/>
                                     <TextBlock Grid.Column="5" Text="材料入場" Style="{StaticResource ColumnHeader}"/>
                                     <TextBlock Grid.Column="6" Text="配電" Style="{StaticResource ColumnHeader}"/>
-                                    <TextBlock Grid.Column="7" Text="交期" Style="{StaticResource ColumnHeader}"/>
-                                    <TextBlock Grid.Column="8" Text="盤內配電" Style="{StaticResource ColumnHeader}"/>
-                                    <TextBlock Grid.Column="9" Text="盤外配電" Style="{StaticResource ColumnHeader}"/>
-                                    <TextBlock Grid.Column="10" Text="耗材提供" Style="{StaticResource ColumnHeader}"/>
-                                    <TextBlock Grid.Column="11" Text="狀態" Style="{StaticResource ColumnHeader}"/>
+                                    <TextBlock Grid.Column="7" Text="出料" Style="{StaticResource ColumnHeader}"/>
+                                    <TextBlock Grid.Column="8" Text="交期" Style="{StaticResource ColumnHeader}"/>
+                                    <TextBlock Grid.Column="9" Text="盤內配電" Style="{StaticResource ColumnHeader}"/>
+                                    <TextBlock Grid.Column="10" Text="盤外配電" Style="{StaticResource ColumnHeader}"/>
+                                    <TextBlock Grid.Column="11" Text="耗材提供" Style="{StaticResource ColumnHeader}"/>
+                                    <TextBlock Grid.Column="12" Text="狀態" Style="{StaticResource ColumnHeader}"/>
                                 </Grid>
                             </Border>
 
@@ -491,7 +496,7 @@
                                 </StackPanel>
                                 <StackPanel Grid.Column="2">
                                     <TextBlock Text="機種 *" Style="{StaticResource FieldLabel}"/>
-                                    <TextBox x:Name="ModelBox"/>
+                                    <views:SuggestBox x:Name="ModelBox"/>
                                 </StackPanel>
                             </Grid>
 
@@ -507,7 +512,7 @@
                                 </StackPanel>
                                 <StackPanel Grid.Column="2">
                                     <TextBlock Text="客戶" Style="{StaticResource FieldLabel}"/>
-                                    <TextBox x:Name="CustomerBox"/>
+                                    <views:SuggestBox x:Name="CustomerBox"/>
                                 </StackPanel>
                             </Grid>
 
@@ -517,7 +522,7 @@
                                 <CheckBox x:Name="TSBox" Content="TS"/>
                             </StackPanel>
 
-                            <!-- 日期：預計 / 實際完成分開填 -->
+                            <!-- 日期：預計 / 實際完成分開填。按右邊的日曆圖示挑日期，也可以直接打 -->
                             <Grid Margin="0,0,0,4">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="64"/>
@@ -530,36 +535,25 @@
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
                                 </Grid.RowDefinitions>
 
                                 <TextBlock Grid.Column="1" Text="預計" Style="{StaticResource FieldLabel}"/>
                                 <TextBlock Grid.Column="3" Text="實際完成" Style="{StaticResource FieldLabel}"/>
-
-                                <TextBlock Grid.Row="1" Text="材料入場" FontSize="13" VerticalAlignment="Center"/>
-                                <TextBox x:Name="MaterialPlanBox" Grid.Row="1" Grid.Column="1" Margin="0,0,0,10" ToolTip="例如 2026/10/06，或只打 10/6"/>
-                                <Grid Grid.Row="1" Grid.Column="3" Margin="0,0,0,10">
-                                    <TextBox x:Name="MaterialActualBox" Padding="12,8,40,8" ToolTip="材料實際進場的日期，還沒進場就空白"/>
-                                    <Button Content="&#xE73E;" Style="{StaticResource FieldIconButton}" HorizontalAlignment="Right"
-                                            Margin="0,0,4,0" ToolTip="今天完成" Tag="MaterialActualBox" Click="Today_Click"/>
-                                </Grid>
-
-                                <TextBlock Grid.Row="2" Text="配電" FontSize="13" VerticalAlignment="Center"/>
-                                <TextBox x:Name="WiringPlanBox" Grid.Row="2" Grid.Column="1" Margin="0,0,0,10" ToolTip="例如 2026/10/06，或只打 10/6"/>
-                                <Grid Grid.Row="2" Grid.Column="3" Margin="0,0,0,10">
-                                    <TextBox x:Name="WiringActualBox" Padding="12,8,40,8" ToolTip="配電實際完成的日期，還沒完成就空白"/>
-                                    <Button Content="&#xE73E;" Style="{StaticResource FieldIconButton}" HorizontalAlignment="Right"
-                                            Margin="0,0,4,0" ToolTip="今天完成" Tag="WiringActualBox" Click="Today_Click"/>
-                                </Grid>
-
-                                <TextBlock Grid.Row="3" Text="交期" FontSize="13" VerticalAlignment="Center"/>
-                                <TextBox x:Name="DeliveryPlanBox" Grid.Row="3" Grid.Column="1" Margin="0,0,0,10" ToolTip="例如 2026/10/06，或只打 10/6"/>
-                                <Grid Grid.Row="3" Grid.Column="3" Margin="0,0,0,10">
-                                    <TextBox x:Name="DeliveryActualBox" Padding="12,8,40,8" ToolTip="實際交貨的日期；填了這格，這筆工令就算完成"/>
-                                    <Button Content="&#xE73E;" Style="{StaticResource FieldIconButton}" HorizontalAlignment="Right"
-                                            Margin="0,0,4,0" ToolTip="今天完成" Tag="DeliveryActualBox" Click="Today_Click"/>
-                                </Grid>
+                                <TextBlock Grid.Row="1" Text="材料入場" FontSize="13" VerticalAlignment="Center" Margin="0,0,0,10"/>
+                                <views:DateBox x:Name="MaterialPlanBox" Grid.Row="1" Grid.Column="1" Margin="0,0,0,10" ToolTip="預計材料入場的日期"/>
+                                <views:DateBox x:Name="MaterialActualBox" Grid.Row="1" Grid.Column="3" Margin="0,0,0,10" ToolTip="材料實際進場的日期，還沒進場就空白"/>
+                                <TextBlock Grid.Row="2" Text="配電" FontSize="13" VerticalAlignment="Center" Margin="0,0,0,10"/>
+                                <views:DateBox x:Name="WiringPlanBox" Grid.Row="2" Grid.Column="1" Margin="0,0,0,10" ToolTip="預計配電的日期"/>
+                                <views:DateBox x:Name="WiringActualBox" Grid.Row="2" Grid.Column="3" Margin="0,0,0,10" ToolTip="配電實際完成的日期，還沒完成就空白"/>
+                                <TextBlock Grid.Row="3" Text="出料" FontSize="13" VerticalAlignment="Center" Margin="0,0,0,10"/>
+                                <views:DateBox x:Name="DispatchPlanBox" Grid.Row="3" Grid.Column="1" Margin="0,0,0,10" ToolTip="預計出料的日期"/>
+                                <views:DateBox x:Name="DispatchActualBox" Grid.Row="3" Grid.Column="3" Margin="0,0,0,10" ToolTip="實際出料的日期，還沒出料就空白"/>
+                                <TextBlock Grid.Row="4" Text="交期" FontSize="13" VerticalAlignment="Center" Margin="0,0,0,10"/>
+                                <views:DateBox x:Name="DeliveryPlanBox" Grid.Row="4" Grid.Column="1" Margin="0,0,0,10" ToolTip="預計交貨的日期"/>
+                                <views:DateBox x:Name="DeliveryActualBox" Grid.Row="4" Grid.Column="3" Margin="0,0,0,10" ToolTip="實際交貨的日期；填了這格，這筆工令就算完成"/>
                             </Grid>
-                            <TextBlock Text="日期可打 2026/10/06 或只打 10/6（今年）。按 ✓ 填入今天；還沒完成就留空白。"
+                            <TextBlock Text="按日曆圖示選日期，也可以直接打 2026/10/06 或 10/6（今年）。還沒完成就留空白。"
                                        Style="{StaticResource FieldHint}" Margin="2,0,0,16"/>
 
                             <Grid Margin="0,0,0,14">
@@ -570,16 +564,16 @@
                                 </Grid.ColumnDefinitions>
                                 <StackPanel>
                                     <TextBlock Text="盤內配電" Style="{StaticResource FieldLabel}"/>
-                                    <TextBox x:Name="InnerWiringBox"/>
+                                    <views:SuggestBox x:Name="InnerWiringBox"/>
                                 </StackPanel>
                                 <StackPanel Grid.Column="2">
                                     <TextBlock Text="盤外配電" Style="{StaticResource FieldLabel}"/>
-                                    <TextBox x:Name="OuterWiringBox"/>
+                                    <views:SuggestBox x:Name="OuterWiringBox"/>
                                 </StackPanel>
                             </Grid>
 
                             <TextBlock Text="耗材提供" Style="{StaticResource FieldLabel}"/>
-                            <TextBox x:Name="ConsumablesBox" Margin="0,0,0,14" ToolTip="耗材由誰提供，例如：公司、客戶、廠商名稱"/>
+                            <views:SuggestBox x:Name="ConsumablesBox" Margin="0,0,0,14" ToolTip="耗材由誰提供，例如：公司、客戶、廠商名稱"/>
 
                             <TextBlock Text="備註" Style="{StaticResource FieldLabel}"/>
                             <TextBox x:Name="NoteBox" Height="64" AcceptsReturn="True"

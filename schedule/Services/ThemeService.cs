@@ -61,6 +61,7 @@ namespace schedule.Services
             ("WarningBrush",            "#B45309", "#FBBF24"),
             ("WarningSoftBrush",        "#FFFBEB", "#2E2512"),
             ("AccentTextBrush",         "#4338CA", "#A5B4FC"),
+            ("DispatchBrush",           "#A855F7", "#C084FC"), // 甘特圖：出料 → 交期
         };
 
         /// <summary>標題圖示的漸層（左上 → 右下）。</summary>

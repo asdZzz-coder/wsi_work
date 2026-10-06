@@ -2,8 +2,8 @@ using schedule.Models;
 
 namespace schedule.Services
 {
-    /// <summary>工令的三個時間點。</summary>
-    public enum MilestoneKind { Material, Wiring, Delivery }
+    /// <summary>工令的四個時間點（依先後順序）。</summary>
+    public enum MilestoneKind { Material, Wiring, Dispatch, Delivery }
 
     /// <summary>
     /// 時間軸上的一件事：某工令的某個時間點。已完成的放在實際日期，還沒完成的放在預計日期。
@@ -27,6 +27,7 @@ namespace schedule.Services
         {
             MilestoneKind.Material => "材料入場",
             MilestoneKind.Wiring => "配電",
+            MilestoneKind.Dispatch => "出料",
             _ => "交貨",
         };
 
@@ -34,6 +35,7 @@ namespace schedule.Services
         {
             MilestoneKind.Material => (j.MaterialPlan, j.MaterialActual),
             MilestoneKind.Wiring => (j.WiringPlan, j.WiringActual),
+            MilestoneKind.Dispatch => (j.DispatchPlan, j.DispatchActual),
             _ => (j.DeliveryPlan, j.DeliveryActual),
         };
 

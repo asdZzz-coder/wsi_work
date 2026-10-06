@@ -162,8 +162,12 @@ namespace schedule.Views
             {
                 double x1 = GanttMath.CenterX(seg.From, _start, _dayWidth);
                 double x2 = GanttMath.CenterX(seg.To, _start, _dayWidth);
-                var bar = AddRect(BodyCanvas, x1, y + PlanBarY, Math.Max(x2 - x1, 2), PlanBarHeight,
-                    seg.StartsAt == MilestoneKind.Material ? "AccentSoftBrush" : "AccentBrush");
+                var bar = AddRect(BodyCanvas, x1, y + PlanBarY, Math.Max(x2 - x1, 2), PlanBarHeight, seg.StartsAt switch
+                {
+                    MilestoneKind.Material => "AccentSoftBrush",
+                    MilestoneKind.Dispatch => "DispatchBrush",
+                    _ => "AccentBrush",
+                });
                 bar.RadiusX = bar.RadiusY = 4;
                 if (seg.StartsAt == MilestoneKind.Material)
                 {
@@ -255,6 +259,7 @@ namespace schedule.Views
             return $"{head}\n" +
                    $"{Line("材料入場", j.MaterialPlan, j.MaterialActual)}\n" +
                    $"{Line("配　　電", j.WiringPlan, j.WiringActual)}\n" +
+                   $"{Line("出　　料", j.DispatchPlan, j.DispatchActual)}\n" +
                    $"{Line("交　　期", j.DeliveryPlan, j.DeliveryActual)}\n" +
                    $"狀態：{ScheduleRules.StatusText(status)}（點一下編輯）";
         }

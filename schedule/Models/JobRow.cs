@@ -14,6 +14,7 @@ namespace schedule.Models
             Status = ScheduleRules.Status(job, today);
             Material = Cell("材料入場", job.MaterialPlan, job.MaterialActual, today);
             Wiring = Cell("配電", job.WiringPlan, job.WiringActual, today);
+            Dispatch = Cell("出料", job.DispatchPlan, job.DispatchActual, today);
             Delivery = Cell("交期", job.DeliveryPlan, job.DeliveryActual, today);
         }
 
@@ -34,6 +35,7 @@ namespace schedule.Models
 
         public MilestoneCell Material { get; }
         public MilestoneCell Wiring { get; }
+        public MilestoneCell Dispatch { get; }
         public MilestoneCell Delivery { get; }
 
         public JobStatus Status { get; }

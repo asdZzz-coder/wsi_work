@@ -9,6 +9,9 @@ namespace schedule.Services
     public class ScheduleData
     {
         public List<Job> Jobs { get; set; } = new();
+
+        /// <summary>表單下拉選單記住的輸入（null = 舊版資料，還沒建立過）。</summary>
+        public InputHistoryData? History { get; set; }
     }
 
     /// <summary>

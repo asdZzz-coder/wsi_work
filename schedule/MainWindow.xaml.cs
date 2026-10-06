@@ -30,6 +30,9 @@ namespace schedule
             Height = Math.Min(Height, SystemParameters.WorkArea.Height - 20);
             Width = Math.Min(Width, SystemParameters.WorkArea.Width - 20);
             _data = DataStore.Load();
+            InputHistory.Ensure(_data);
+            foreach (var box in SuggestBoxes.Keys) box.ItemRemoved += OnSuggestionRemoved;
+            UpdateSuggestions();
             GanttPanel.JobClicked += OnViewJobClicked;
             TimelinePanel.JobClicked += OnViewJobClicked;
             DashboardPanel.JobClicked += OnViewJobClicked;
@@ -358,6 +361,8 @@ namespace schedule
             MaterialActualBox.Text = Date(j.MaterialActual);
             WiringPlanBox.Text = Date(j.WiringPlan);
             WiringActualBox.Text = Date(j.WiringActual);
+            DispatchPlanBox.Text = Date(j.DispatchPlan);
+            DispatchActualBox.Text = Date(j.DispatchActual);
             DeliveryPlanBox.Text = Date(j.DeliveryPlan);
             DeliveryActualBox.Text = Date(j.DeliveryActual);
             InnerWiringBox.Text = j.InnerWiring;
@@ -373,7 +378,8 @@ namespace schedule
             foreach (var box in new[]
                      {
                          WorkOrderBox, ModelBox, QuantityBox, CustomerBox,
-                         MaterialPlanBox, MaterialActualBox, WiringPlanBox, WiringActualBox, DeliveryPlanBox, DeliveryActualBox,
+                         MaterialPlanBox, MaterialActualBox, WiringPlanBox, WiringActualBox,
+                         DispatchPlanBox, DispatchActualBox, DeliveryPlanBox, DeliveryActualBox,
                          InnerWiringBox, OuterWiringBox, ConsumablesBox, NoteBox,
                      })
                 box.Clear();
@@ -381,10 +387,37 @@ namespace schedule
             TSBox.IsChecked = false;
         }
 
-        private void Today_Click(object sender, RoutedEventArgs e)
+        // ---------- 下拉選單：記住輸入過的機種、客戶、人員、耗材提供 ----------
+
+        private Dictionary<Views.SuggestBox, HistoryField> SuggestBoxes => new()
         {
-            if (sender is FrameworkElement { Tag: string name } && FindName(name) is TextBox box)
-                box.Text = Date(DateTime.Today);
+            [ModelBox] = HistoryField.Model,
+            [CustomerBox] = HistoryField.Customer,
+            [InnerWiringBox] = HistoryField.People,
+            [OuterWiringBox] = HistoryField.People,
+            [ConsumablesBox] = HistoryField.Consumables,
+        };
+
+        private void UpdateSuggestions()
+        {
+            var history = InputHistory.Ensure(_data);
+            foreach (var (box, field) in SuggestBoxes)
+                box.Items = InputHistory.Items(history, field).ToList();
+        }
+
+        private void OnSuggestionRemoved(Views.SuggestBox box, string value)
+        {
+            if (!InputHistory.Forget(InputHistory.Ensure(_data), SuggestBoxes[box], value)) return;
+            UpdateSuggestions();
+            try
+            {
+                DataStore.Save(_data);
+                StatusText.Text = $"已從下拉選單移除「{value}」";
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"儲存失敗，資料尚未寫入硬碟：{ex.Message}", "儲存", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         /// <summary>讀取並檢查表單；有錯誤時提示、把游標移到該欄位，並回傳 null。</summary>
@@ -419,6 +452,8 @@ namespace schedule
                 (MaterialActualBox, "實際材料入場日期", v => job.MaterialActual = v),
                 (WiringPlanBox, "預計配電日期", v => job.WiringPlan = v),
                 (WiringActualBox, "實際配電完成日期", v => job.WiringActual = v),
+                (DispatchPlanBox, "預計出料日期", v => job.DispatchPlan = v),
+                (DispatchActualBox, "實際出料日期", v => job.DispatchActual = v),
                 (DeliveryPlanBox, "預計交期", v => job.DeliveryPlan = v),
                 (DeliveryActualBox, "實際交貨日期", v => job.DeliveryActual = v),
             };
@@ -437,20 +472,12 @@ namespace schedule
             }
 
             // 預計日期前後顛倒（例如材料比交期晚到）多半是打錯，提醒一下
-            if (PlanOrderWarning(job) is { } warning)
+            if (ScheduleRules.PlanOrderWarning(job) is { } warning)
             {
                 var ok = MessageBox.Show($"{warning}\n\n確定要這樣存嗎？", title, MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No);
                 if (ok != MessageBoxResult.Yes) return null;
             }
             return job;
-        }
-
-        private static string? PlanOrderWarning(Job j)
-        {
-            if (j.MaterialPlan > j.WiringPlan) return "預計材料入場日期比預計配電日期晚。";
-            if (j.WiringPlan > j.DeliveryPlan) return "預計配電日期比預計交期晚。";
-            if (j.MaterialPlan > j.DeliveryPlan) return "預計材料入場日期比預計交期晚。";
-            return null;
         }
 
         private static Job? Invalid(Control field, string message, string title)
@@ -468,6 +495,7 @@ namespace schedule
             var job = ReadForm(editing: null);
             if (job == null) return;
             _data.Jobs.Add(job);
+            InputHistory.Remember(InputHistory.Ensure(_data), job);
             _selected = job;
             FillForm(job);
             EnsureVisible(job);
@@ -486,6 +514,7 @@ namespace schedule
 
             edited.Id = target.Id;
             _data.Jobs[_data.Jobs.IndexOf(target)] = edited;
+            InputHistory.Remember(InputHistory.Ensure(_data), edited);
             _selected = edited;
             FillForm(edited);
             EnsureVisible(edited);
@@ -519,6 +548,7 @@ namespace schedule
             {
                 MessageBox.Show($"儲存失敗，資料尚未寫入硬碟：{ex.Message}", "儲存", MessageBoxButton.OK, MessageBoxImage.Error);
             }
+            UpdateSuggestions();
             Refresh();
         }
 
@@ -581,6 +611,9 @@ namespace schedule
             if (mode == MessageBoxResult.Cancel) return;
 
             var (added, updated) = ScheduleRules.Merge(_data.Jobs, imported, replace: mode == MessageBoxResult.No);
+            // Excel 裡的值也加進下拉選單（第一列排最前面）
+            var history = InputHistory.Ensure(_data);
+            for (int i = imported.Count - 1; i >= 0; i--) InputHistory.Remember(history, imported[i]);
 
             ClearForm();
             Persist($"匯入完成，新增 {added} 筆、更新 {updated} 筆");

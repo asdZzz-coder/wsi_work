@@ -32,6 +32,7 @@
     <Compile Include="..\schedule\Services\Timeline.cs" Link="Source\Timeline.cs" />
     <Compile Include="..\schedule\Services\GanttMath.cs" Link="Source\GanttMath.cs" />
     <Compile Include="..\schedule\Services\DashboardStats.cs" Link="Source\DashboardStats.cs" />
+    <Compile Include="..\schedule\Services\InputHistory.cs" Link="Source\InputHistory.cs" />
   </ItemGroup>
 
   <ItemGroup>

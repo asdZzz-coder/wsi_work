@@ -42,7 +42,9 @@
                         Background="{DynamicResource AccentSoftBrush}" BorderBrush="{DynamicResource AccentBrush}"/>
                 <TextBlock Text="預計：材料入場 → 配電"/>
                 <Border Width="22" Height="10" CornerRadius="3" Margin="0,0,6,0" Background="{DynamicResource AccentBrush}"/>
-                <TextBlock Text="預計：配電 → 交期"/>
+                <TextBlock Text="配電 → 出料"/>
+                <Border Width="22" Height="10" CornerRadius="3" Margin="0,0,6,0" Background="{DynamicResource DispatchBrush}"/>
+                <TextBlock Text="出料 → 交期"/>
                 <Border Width="22" Height="5" CornerRadius="2" Margin="0,0,6,0" Background="{DynamicResource SuccessBrush}"/>
                 <TextBlock Text="實際完成"/>
                 <Rectangle Width="8" Height="8" Margin="0,0,6,0" Fill="{DynamicResource DangerBrush}" RenderTransformOrigin="0.5,0.5">

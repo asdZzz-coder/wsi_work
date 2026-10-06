@@ -20,7 +20,7 @@ namespace schedule.Services
     public enum JobFilter { All, Active, Overdue, DueSoon, Done }
 
     /// <summary>清單排序方式。</summary>
-    public enum JobSort { DeliveryPlan, MaterialPlan, WiringPlan, WorkOrder, Customer }
+    public enum JobSort { DeliveryPlan, MaterialPlan, WiringPlan, DispatchPlan, WorkOrder, Customer }
 
     /// <summary>排程的判斷規則（狀態、篩選、排序），不依賴畫面，方便自動測試。</summary>
     public static class ScheduleRules
@@ -41,7 +41,24 @@ namespace schedule.Services
         }
 
         public static IEnumerable<(DateTime? Plan, DateTime? Actual)> Milestones(Job j) =>
-            new[] { (j.MaterialPlan, j.MaterialActual), (j.WiringPlan, j.WiringActual), (j.DeliveryPlan, j.DeliveryActual) };
+            new[] { (j.MaterialPlan, j.MaterialActual), (j.WiringPlan, j.WiringActual), (j.DispatchPlan, j.DispatchActual), (j.DeliveryPlan, j.DeliveryActual) };
+
+        /// <summary>
+        /// 預計日期前後顛倒（應該是 材料入場 ≤ 配電 ≤ 出料 ≤ 交期）時的提醒文字，多半是打錯；沒問題回傳 null。
+        /// 沒填的跳過，只比較有填的。
+        /// </summary>
+        public static string? PlanOrderWarning(Job j)
+        {
+            var plans = new (string Name, DateTime? Date)[]
+            {
+                ("預計材料入場日期", j.MaterialPlan), ("預計配電日期", j.WiringPlan), ("預計出料日期", j.DispatchPlan), ("預計交期", j.DeliveryPlan),
+            }.Where(p => p.Date != null).ToList();
+            for (int i = 0; i < plans.Count; i++)
+                for (int k = i + 1; k < plans.Count; k++)
+                    if (plans[i].Date!.Value.Date > plans[k].Date!.Value.Date)
+                        return $"{plans[i].Name}比{plans[k].Name}晚。";
+            return null;
+        }
 
         public static JobStatus Status(Job job, DateTime today)
         {
@@ -94,6 +111,7 @@ namespace schedule.Services
             {
                 JobSort.MaterialPlan => ByDate(j => j.MaterialPlan),
                 JobSort.WiringPlan => ByDate(j => j.WiringPlan),
+                JobSort.DispatchPlan => ByDate(j => j.DispatchPlan),
                 JobSort.WorkOrder => jobs.OrderBy(j => j.WorkOrder, NaturalComparer.Instance),
                 JobSort.Customer => jobs.OrderBy(j => j.Customer.Length == 0).ThenBy(j => j.Customer, StringComparer.CurrentCultureIgnoreCase),
                 _ => ByDate(j => j.DeliveryPlan),

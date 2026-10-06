@@ -23,7 +23,8 @@ namespace schedule.Services
 
         /// <summary>工令所有有填的日期（預計與實際）。</summary>
         public static IEnumerable<DateTime> AllDates(Job j) =>
-            new[] { j.MaterialPlan, j.MaterialActual, j.WiringPlan, j.WiringActual, j.DeliveryPlan, j.DeliveryActual }
+            Enum.GetValues<MilestoneKind>()
+                .SelectMany(k => { var (plan, actual) = Timeline.Dates(j, k); return new[] { plan, actual }; })
                 .Where(d => d != null).Select(d => d!.Value.Date);
 
         /// <summary>
@@ -67,15 +68,16 @@ namespace schedule.Services
             X(date, start, dayWidth) + dayWidth / 2;
 
         /// <summary>
-        /// 預計的橫條：依序連接有填的預計日期（材料入場 → 配電 → 交期）。
-        /// 每段的顏色看起點：從材料入場開始是「備料」，從配電開始是「配電」。日期前後顛倒的段落不畫。
+        /// 預計的橫條：依序連接有填的預計日期（材料入場 → 配電 → 出料 → 交期）。
+        /// 每段的顏色看起點：從材料入場開始是「備料」，從配電開始是「配電」，從出料開始是「出料到交貨」。
+        /// 日期前後顛倒的段落不畫。
         /// </summary>
         public static List<GanttSegment> PlanSegments(Job j) =>
-            Segments(new[] { (MilestoneKind.Material, j.MaterialPlan), (MilestoneKind.Wiring, j.WiringPlan), (MilestoneKind.Delivery, j.DeliveryPlan) });
+            Segments(Enum.GetValues<MilestoneKind>().Select(k => (k, Timeline.Dates(j, k).Plan)).ToArray());
 
         /// <summary>實際的橫條：依序連接有填的實際日期。</summary>
         public static List<GanttSegment> ActualSegments(Job j) =>
-            Segments(new[] { (MilestoneKind.Material, j.MaterialActual), (MilestoneKind.Wiring, j.WiringActual), (MilestoneKind.Delivery, j.DeliveryActual) });
+            Segments(Enum.GetValues<MilestoneKind>().Select(k => (k, Timeline.Dates(j, k).Actual)).ToArray());
 
         private static List<GanttSegment> Segments((MilestoneKind Kind, DateTime? Date)[] points)
         {
@@ -95,9 +97,11 @@ namespace schedule.Services
         public static GanttSegment? Progress(Job j, DateTime today)
         {
             if (j.DeliveryActual != null) return null;
-            var last = new[] { (MilestoneKind.Material, j.MaterialActual), (MilestoneKind.Wiring, j.WiringActual) }
-                .Where(p => p.Item2 != null)
-                .Select(p => (Kind: p.Item1, Date: p.Item2!.Value.Date))
+            var last = Enum.GetValues<MilestoneKind>()
+                .Where(k => k != MilestoneKind.Delivery)
+                .Select(k => (Kind: k, Timeline.Dates(j, k).Actual))
+                .Where(p => p.Actual != null)
+                .Select(p => (p.Kind, Date: p.Actual!.Value.Date))
                 .OrderBy(p => p.Date)
                 .LastOrDefault();
             if (last == default || last.Date >= today.Date) return null;

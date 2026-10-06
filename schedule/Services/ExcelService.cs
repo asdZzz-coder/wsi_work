@@ -22,6 +22,8 @@ namespace schedule.Services
         private const string HMaterialActual = "實際材料入場";
         private const string HWiringPlan = "預計配電";
         private const string HWiringActual = "實際配電完成";
+        private const string HDispatchPlan = "預計出料";
+        private const string HDispatchActual = "實際出料";
         private const string HDeliveryPlan = "預計交期";
         private const string HDeliveryActual = "實際交貨";
         private const string HInner = "盤內配電";
@@ -33,7 +35,7 @@ namespace schedule.Services
         internal static readonly string[] Headers =
         {
             HWorkOrder, HModel, HQuantity, HCustomer, HCE, HTS,
-            HMaterialPlan, HMaterialActual, HWiringPlan, HWiringActual, HDeliveryPlan, HDeliveryActual,
+            HMaterialPlan, HMaterialActual, HWiringPlan, HWiringActual, HDispatchPlan, HDispatchActual, HDeliveryPlan, HDeliveryActual,
             HInner, HOuter, HConsumables, HNote, HStatus,
         };
 
@@ -43,6 +45,8 @@ namespace schedule.Services
             (HMaterialActual, j => j.MaterialActual, (j, v) => j.MaterialActual = v),
             (HWiringPlan, j => j.WiringPlan, (j, v) => j.WiringPlan = v),
             (HWiringActual, j => j.WiringActual, (j, v) => j.WiringActual = v),
+            (HDispatchPlan, j => j.DispatchPlan, (j, v) => j.DispatchPlan = v),
+            (HDispatchActual, j => j.DispatchActual, (j, v) => j.DispatchActual = v),
             (HDeliveryPlan, j => j.DeliveryPlan, (j, v) => j.DeliveryPlan = v),
             (HDeliveryActual, j => j.DeliveryActual, (j, v) => j.DeliveryActual = v),
         };

@@ -19,6 +19,7 @@ namespace schedule.Models
             {
                 MilestoneKind.Material => "", // 箱子
                 MilestoneKind.Wiring => "",   // 閃電
+                MilestoneKind.Dispatch => "", // 往外的箭頭
                 _ => "",                      // 旗子
             };
             Detail = string.Join(" · ", new[]

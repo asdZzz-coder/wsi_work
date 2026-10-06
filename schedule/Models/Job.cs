@@ -1,7 +1,7 @@
 namespace schedule.Models
 {
     /// <summary>
-    /// 一筆工令的排程。三個時間點（材料入場、配電、交期）都分成「預計」與「實際完成」兩個日期，
+    /// 一筆工令的排程。四個時間點（材料入場、配電、出料、交期）都分成「預計」與「實際完成」兩個日期，
     /// 還沒排定或還沒完成時為 null。
     /// </summary>
     public class Job
@@ -19,6 +19,8 @@ namespace schedule.Models
         public DateTime? MaterialActual { get; set; } // 實際材料入場
         public DateTime? WiringPlan { get; set; }     // 預計配電
         public DateTime? WiringActual { get; set; }   // 實際配電完成
+        public DateTime? DispatchPlan { get; set; }   // 預計出料
+        public DateTime? DispatchActual { get; set; } // 實際出料
         public DateTime? DeliveryPlan { get; set; }   // 預計交期
         public DateTime? DeliveryActual { get; set; } // 實際交貨
 
