@@ -65,3 +65,12 @@ dotnet run --project schedule
 git tag v1.0.0
 git push origin v1.0.0
 ```
+
+### 智慧型應用程式控制
+
+開著 Windows「智慧型應用程式控制」的電腦，會依檔案內容擋下某些沒有簽章的 `WorkSchedule.dll`，程式一開就關掉（v1.0.0 就發生過）。
+所以 Release 版設成不論在哪裡建置都產生一模一樣的檔案，SDK 版本也用 `global.json` 固定。發佈前可以先在本機確認：
+
+1. 用 Visual Studio 的 MSBuild 執行和 `release.yml` 相同的 Publish 指令。
+2. 開啟 `clickonce\Application Files\WorkSchedule_x_x_x_x\WorkSchedule.exe`，確定沒有被擋下。
+3. 再推送標籤。GitHub Actions 的記錄會印出 `WorkSchedule.dll` 的雜湊值，可以和本機的比對。

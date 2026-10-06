@@ -16,9 +16,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 用 global.json 指定的 SDK 版本，打包出來的 WorkSchedule.dll 才會和本機建置的一模一樣
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '10.0.x'
+          global-json-file: global.json
 
       # 自動測試沒過就不發佈
       - name: Test
@@ -38,6 +39,9 @@ jobs:
             /p:PublishDir="$PWD\clickonce\" /p:PublishUrl="$PWD\clickonce\" `
             /v:minimal
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          # 印出雜湊值，方便和本機建置的檔案比對
+          Get-ChildItem 'clickonce\Application Files\*\WorkSchedule.*' |
+            Where-Object Extension -in '.dll', '.exe' | Get-FileHash | Format-Table Hash, Path -AutoSize | Out-String -Width 300
 
       - name: Zip installer
         shell: pwsh

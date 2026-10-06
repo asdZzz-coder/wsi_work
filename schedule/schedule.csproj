@@ -8,11 +8,22 @@
     <UseWPF>true</UseWPF>
     <AssemblyName>WorkSchedule</AssemblyName>
     <RootNamespace>schedule</RootNamespace>
-    <Version>1.0.0</Version>
+    <Version>1.0.1</Version>
     <StartupObject>schedule.Program</StartupObject>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <!-- 只保留英文與繁體中文的語系資源，省掉其他語言資料夾 -->
     <SatelliteResourceLanguages>en;zh-Hant</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <!--
+    Release 版不論在哪個資料夾建置都產生一模一樣的 WorkSchedule.dll（不含建置路徑、不帶 pdb），
+    這樣本機建置的檔案就和 GitHub Actions 打包的相同，可以先在本機確認不會被 Windows
+    「智慧型應用程式控制」擋下（它是依檔案內容判斷，v1.0.0 的 dll 就被擋過）。
+  -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+    <DebugType>none</DebugType>
   </PropertyGroup>
 
   <ItemGroup>
