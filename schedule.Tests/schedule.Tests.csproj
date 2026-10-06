@@ -28,6 +28,10 @@
     <Compile Include="..\schedule\Services\ExcelService.cs" Link="Source\ExcelService.cs" />
     <Compile Include="..\schedule\Models\Job.cs" Link="Source\Job.cs" />
     <Compile Include="..\schedule\Models\JobRow.cs" Link="Source\JobRow.cs" />
+    <Compile Include="..\schedule\Models\EventRow.cs" Link="Source\EventRow.cs" />
+    <Compile Include="..\schedule\Services\Timeline.cs" Link="Source\Timeline.cs" />
+    <Compile Include="..\schedule\Services\GanttMath.cs" Link="Source\GanttMath.cs" />
+    <Compile Include="..\schedule\Services\DashboardStats.cs" Link="Source\DashboardStats.cs" />
   </ItemGroup>
 
   <ItemGroup>

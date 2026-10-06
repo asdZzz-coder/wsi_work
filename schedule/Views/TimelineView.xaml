@@ -1,0 +1,88 @@
+<UserControl x:Class="schedule.Views.TimelineView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <DockPanel Margin="2,0,0,12">
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                <CheckBox x:Name="HideDoneBox" Content="隱藏已完成" FontSize="13" VerticalAlignment="Center" Margin="0,0,16,0"
+                          Checked="Option_Changed" Unchecked="Option_Changed"/>
+                <Button Style="{StaticResource GhostButton}" Padding="12,6" FontSize="13" Margin="0,0,8,0"
+                        ToolTip="捲動到今天" Click="Today_Click">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#xE787;" Style="{StaticResource Icon}" FontSize="12" Margin="0,0,6,0"/>
+                        <TextBlock Text="今天"/>
+                    </StackPanel>
+                </Button>
+                <Border Style="{StaticResource SegmentBar}">
+                    <StackPanel Orientation="Horizontal">
+                        <RadioButton x:Name="RangeRecent" Style="{StaticResource SegmentTab}" GroupName="TimelineRange"
+                                     Content="近期" Padding="12,4" IsChecked="True" Checked="Option_Changed"
+                                     ToolTip="前 2 週到未來 2 個月；逾期還沒完成的一律顯示"/>
+                        <RadioButton Style="{StaticResource SegmentTab}" GroupName="TimelineRange"
+                                     Content="全部" Padding="12,4" Checked="Option_Changed"/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+            <TextBlock x:Name="SummaryText" FontSize="12" Foreground="{DynamicResource MutedBrush}" VerticalAlignment="Center"
+                       TextTrimming="CharacterEllipsis"/>
+        </DockPanel>
+
+        <ScrollViewer x:Name="Scroll" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <ItemsControl x:Name="Days" Margin="0,0,10,0" ButtonBase.Click="Card_Click">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="104"/>
+                                <ColumnDefinition Width="30"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Margin="2,4,0,0">
+                                <TextBlock x:Name="DateTitle" Text="{Binding Title}" FontSize="14" FontWeight="SemiBold"/>
+                                <TextBlock x:Name="DateSub" Text="{Binding Relative}" FontSize="12"
+                                           Foreground="{DynamicResource MutedBrush}" Margin="0,1,0,0"/>
+                            </StackPanel>
+
+                            <!-- 中間的直線與圓點 -->
+                            <Rectangle Grid.Column="1" Width="2" HorizontalAlignment="Center" Fill="{DynamicResource LineBrush}"/>
+                            <Ellipse x:Name="Dot" Grid.Column="1" Width="12" Height="12" VerticalAlignment="Top" Margin="0,9,0,0"
+                                     StrokeThickness="2" Fill="{DynamicResource CardBrush}" Stroke="{DynamicResource SubtleBrush}"/>
+
+                            <ItemsControl Grid.Column="2" ItemsSource="{Binding Events}" ItemTemplate="{StaticResource EventCard}"
+                                          Margin="8,0,0,10"/>
+                            <Border x:Name="NoEvents" Grid.Column="2" Margin="8,0,0,10" CornerRadius="12" Padding="14,12"
+                                    BorderThickness="1" BorderBrush="{DynamicResource LineBrush}" Visibility="Collapsed">
+                                <TextBlock Text="今天沒有排定的項目" FontSize="13" Foreground="{DynamicResource MutedBrush}"/>
+                            </Border>
+                        </Grid>
+                        <DataTemplate.Triggers>
+                            <DataTrigger Binding="{Binding IsPast}" Value="True">
+                                <Setter TargetName="DateTitle" Property="Foreground" Value="{DynamicResource MutedBrush}"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding IsToday}" Value="True">
+                                <Setter TargetName="DateTitle" Property="Foreground" Value="{DynamicResource AccentTextBrush}"/>
+                                <Setter TargetName="DateSub" Property="Foreground" Value="{DynamicResource AccentTextBrush}"/>
+                                <Setter TargetName="Dot" Property="Fill" Value="{DynamicResource AccentBrush}"/>
+                                <Setter TargetName="Dot" Property="Stroke" Value="{DynamicResource AccentSoftBrush}"/>
+                                <Setter TargetName="Dot" Property="Width" Value="14"/>
+                                <Setter TargetName="Dot" Property="Height" Value="14"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding HasEvents}" Value="False">
+                                <Setter TargetName="NoEvents" Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                        </DataTemplate.Triggers>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+
+        <TextBlock x:Name="EmptyText" Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center"
+                   LineHeight="20" Foreground="{DynamicResource MutedBrush}" Visibility="Collapsed"/>
+    </Grid>
+</UserControl>

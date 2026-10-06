@@ -18,6 +18,7 @@ namespace schedule
         // 目前在表單裡編輯的工令；null 表示表單是「新增」
         private Job? _selected;
         private JobFilter _filter = JobFilter.All;
+        private ViewMode _view = ViewMode.List;
 
         // 重建清單時會觸發 SelectionChanged，這段期間不要把表單清掉
         private bool _refreshing;
@@ -29,6 +30,11 @@ namespace schedule
             Height = Math.Min(Height, SystemParameters.WorkArea.Height - 20);
             Width = Math.Min(Width, SystemParameters.WorkArea.Width - 20);
             _data = DataStore.Load();
+            GanttPanel.JobClicked += OnViewJobClicked;
+            TimelinePanel.JobClicked += OnViewJobClicked;
+            DashboardPanel.JobClicked += OnViewJobClicked;
+            DashboardPanel.SearchRequested += OnSearchRequested;
+            RestoreView(); // 上次關閉時看的檢視
             ClearForm();
             Refresh();
             Title = _updater.IsInstalled ? $"{AppTitle} v{_updater.CurrentVersion}" : $"{AppTitle}（開發版）";
@@ -188,9 +194,110 @@ namespace schedule
             finally { _refreshing = false; }
             if (JobList.SelectedItem != null) JobList.ScrollIntoView(JobList.SelectedItem);
 
-            EmptyText.Text = jobs.Count == 0
-                ? "還沒有工令\n在右邊填好資料後按「新增」"
-                : "沒有符合條件的工令";
+            EmptyText.Text = EmptyMessage;
+            RefreshView(rows.Select(r => r.Job).ToList(), today);
+        }
+
+        private string EmptyMessage => _data.Jobs.Count == 0
+            ? "還沒有工令\n在右邊填好資料後按「新增」"
+            : "沒有符合條件的工令";
+
+        /// <summary>甘特圖、時間軸用和清單一樣的篩選 / 搜尋 / 排序；看板看全部工令。只更新看得到的那個。</summary>
+        private void RefreshView(List<Job> visible, DateTime today)
+        {
+            var message = EmptyMessage;
+            switch (_view)
+            {
+                case ViewMode.Gantt:
+                    GanttPanel.EmptyMessage = message;
+                    GanttPanel.Show(visible, _selected, today);
+                    break;
+                case ViewMode.Timeline:
+                    TimelinePanel.EmptyMessage = message;
+                    TimelinePanel.Show(visible, _selected, today);
+                    break;
+                case ViewMode.Dashboard:
+                    DashboardPanel.Show(_data.Jobs, _selected, today);
+                    break;
+            }
+        }
+
+        // ---------- 檢視切換：清單 / 甘特圖 / 時間軸 / 資訊看板 ----------
+
+        private enum ViewMode { List, Gantt, Timeline, Dashboard }
+
+        private static string ViewSettingFile => System.IO.Path.Combine(DataStore.DataDirectory, "view.txt");
+
+        private void View_Checked(object sender, RoutedEventArgs e)
+        {
+            if (sender is not RadioButton { Tag: string tag } || !Enum.TryParse<ViewMode>(tag, out var mode)) return;
+            _view = mode;
+            if (JobList == null) return; // InitializeComponent 期間 JobList 還沒建立
+
+            ListPanel.Visibility = Show(mode == ViewMode.List);
+            ListLegend.Visibility = Show(mode == ViewMode.List);
+            GanttPanel.Visibility = Show(mode == ViewMode.Gantt);
+            TimelinePanel.Visibility = Show(mode == ViewMode.Timeline);
+            DashboardPanel.Visibility = Show(mode == ViewMode.Dashboard);
+            FilterRow.Visibility = Show(mode != ViewMode.Dashboard);
+            SearchRow.Visibility = Show(mode != ViewMode.Dashboard);
+            SortBox.Visibility = Show(mode is ViewMode.List or ViewMode.Gantt); // 時間軸一定依日期排
+            Refresh();
+
+            try
+            {
+                System.IO.Directory.CreateDirectory(DataStore.DataDirectory);
+                System.IO.File.WriteAllText(ViewSettingFile, mode.ToString());
+            }
+            catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException) { } // 記不住也沒關係
+        }
+
+        private static Visibility Show(bool visible) => visible ? Visibility.Visible : Visibility.Collapsed;
+
+        private void RestoreView()
+        {
+            try
+            {
+                if (!System.IO.File.Exists(ViewSettingFile)) return;
+                if (!Enum.TryParse<ViewMode>(System.IO.File.ReadAllText(ViewSettingFile).Trim(), out var mode)) return;
+                var tab = mode switch
+                {
+                    ViewMode.Gantt => ViewGantt,
+                    ViewMode.Timeline => ViewTimeline,
+                    ViewMode.Dashboard => ViewDashboard,
+                    _ => ViewList,
+                };
+                tab.IsChecked = true;
+            }
+            catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException) { }
+        }
+
+        /// <summary>在甘特圖、時間軸、看板上點了某筆工令：在右邊表單打開，清單也跟著選取。</summary>
+        private void OnViewJobClicked(Job job)
+        {
+            _selected = job;
+            FillForm(job);
+            SelectInList(job);
+        }
+
+        /// <summary>看板上點了人員或客戶：切到清單、顯示全部，用這個名稱搜尋。</summary>
+        private void OnSearchRequested(string name)
+        {
+            _filter = JobFilter.All;
+            FilterAll.IsChecked = true;
+            ViewList.IsChecked = true;
+            SearchBox.Text = name;
+            StatusText.Text = $"搜尋「{name}」";
+        }
+
+        private void SelectInList(Job? job)
+        {
+            _refreshing = true;
+            try
+            {
+                JobList.SelectedItem = JobList.Items.Cast<JobRow>().FirstOrDefault(r => r.Job == job);
+            }
+            finally { _refreshing = false; }
         }
 
         private void Filter_Checked(object sender, RoutedEventArgs e)
@@ -229,6 +336,12 @@ namespace schedule
         {
             JobList.SelectedItem = null;
             ClearForm();
+            switch (_view)
+            {
+                case ViewMode.Gantt: GanttPanel.Select(null); break;
+                case ViewMode.Timeline: TimelinePanel.Select(null); break;
+                case ViewMode.Dashboard: DashboardPanel.Select(null); break;
+            }
             WorkOrderBox.Focus();
         }
 

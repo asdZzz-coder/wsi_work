@@ -231,6 +231,20 @@
             </Setter>
         </Style>
 
+        <!-- 整張卡片可以點的按鈕（時間軸、看板）：外觀完全由內容決定，鍵盤也能用 Tab / Enter 選取 -->
+        <Style x:Key="CardButton" TargetType="Button">
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <ContentPresenter/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- 輸入框旁的小圖示按鈕 -->
         <Style x:Key="FieldIconButton" TargetType="Button">
             <Setter Property="Width" Value="32"/>
@@ -418,6 +432,143 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <!-- ===== 分段切換（清單 / 甘特圖…、日 / 週 / 月）：放在 SegmentBar 裡，選到的那段浮起來 ===== -->
+        <Style x:Key="SegmentBar" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource InputBgBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource LineBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="12"/>
+            <Setter Property="Padding" Value="3"/>
+        </Style>
+        <Style x:Key="SegmentTab" TargetType="RadioButton">
+            <Setter Property="FontFamily" Value="{StaticResource UiFont}"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Foreground" Value="{DynamicResource MutedBrush}"/>
+            <Setter Property="Padding" Value="14,6"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Bd" CornerRadius="9" Padding="{TemplateBinding Padding}" Background="Transparent"
+                                BorderThickness="1" BorderBrush="Transparent">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource CardBrush}"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource CardBorderBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource AccentTextBrush}"/>
+                                <Setter Property="FontWeight" Value="SemiBold"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ===== 狀態小標籤（逾期 3 天、已完成…）：顏色由 Tag（MilestoneState 名稱）決定 ===== -->
+        <Style x:Key="StateChip" TargetType="Border">
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Padding" Value="8,2"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}"/>
+            <Setter Property="TextElement.Foreground" Value="{DynamicResource AccentTextBrush}"/>
+            <Setter Property="TextElement.FontSize" Value="12"/>
+            <Setter Property="TextElement.FontWeight" Value="SemiBold"/>
+            <Style.Triggers>
+                <Trigger Property="Tag" Value="Overdue">
+                    <Setter Property="Background" Value="{DynamicResource DangerSoftBrush}"/>
+                    <Setter Property="TextElement.Foreground" Value="{DynamicResource DangerBrush}"/>
+                </Trigger>
+                <Trigger Property="Tag" Value="Soon">
+                    <Setter Property="Background" Value="{DynamicResource WarningSoftBrush}"/>
+                    <Setter Property="TextElement.Foreground" Value="{DynamicResource WarningBrush}"/>
+                </Trigger>
+                <Trigger Property="Tag" Value="Late">
+                    <Setter Property="Background" Value="{DynamicResource WarningSoftBrush}"/>
+                    <Setter Property="TextElement.Foreground" Value="{DynamicResource WarningBrush}"/>
+                </Trigger>
+                <Trigger Property="Tag" Value="Done">
+                    <Setter Property="Background" Value="{DynamicResource SuccessSoftBrush}"/>
+                    <Setter Property="TextElement.Foreground" Value="{DynamicResource SuccessBrush}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!--
+          ===== 時間軸、看板上的一個時間點（EventRow）=====
+          左邊是時間點圖示（顏色依狀態），中間工令與機種 / 客戶，右邊狀態標籤。點一下在右邊表單編輯（由各檢視處理）。
+        -->
+        <DataTemplate x:Key="EventCard">
+            <Button Style="{StaticResource CardButton}" Margin="0,0,0,8" AutomationProperties.Name="{Binding Path=.}">
+                <Border x:Name="Bd" CornerRadius="12" Padding="12,9"
+                        Background="{DynamicResource InputBgBrush}" BorderBrush="{DynamicResource LineBrush}" BorderThickness="1">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Border x:Name="IconBox" Width="32" Height="32" CornerRadius="10" VerticalAlignment="Center"
+                                Background="{DynamicResource AccentSoftBrush}">
+                            <TextBlock x:Name="IconText" Text="{Binding Icon}" Style="{StaticResource Icon}" FontSize="14"
+                                       Foreground="{DynamicResource AccentTextBrush}" HorizontalAlignment="Center"/>
+                        </Border>
+                        <StackPanel Grid.Column="1" Margin="12,0,10,0" VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{Binding WorkOrder}" FontSize="13.5" FontWeight="SemiBold"/>
+                                <TextBlock Text="{Binding KindName}" FontSize="13" Foreground="{DynamicResource MutedBrush}" Margin="8,0,0,0"/>
+                            </StackPanel>
+                            <TextBlock x:Name="DetailText" Text="{Binding Detail}" FontSize="12" Foreground="{DynamicResource MutedBrush}"
+                                       TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                            <Border Style="{StaticResource StateChip}" Tag="{Binding StateName}" HorizontalAlignment="Right">
+                                <TextBlock Text="{Binding ChipText}"/>
+                            </Border>
+                            <TextBlock x:Name="SideNote" Text="{Binding SideNote}" FontSize="11.5" Foreground="{DynamicResource SubtleBrush}"
+                                       HorizontalAlignment="Right" Margin="0,3,0,0"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </Button>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding HasDetail}" Value="False">
+                    <Setter TargetName="DetailText" Property="Visibility" Value="Collapsed"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding HasSideNote}" Value="False">
+                    <Setter TargetName="SideNote" Property="Visibility" Value="Collapsed"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding StateName}" Value="Overdue">
+                    <Setter TargetName="IconBox" Property="Background" Value="{DynamicResource DangerSoftBrush}"/>
+                    <Setter TargetName="IconText" Property="Foreground" Value="{DynamicResource DangerBrush}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding StateName}" Value="Soon">
+                    <Setter TargetName="IconBox" Property="Background" Value="{DynamicResource WarningSoftBrush}"/>
+                    <Setter TargetName="IconText" Property="Foreground" Value="{DynamicResource WarningBrush}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding StateName}" Value="Late">
+                    <Setter TargetName="IconBox" Property="Background" Value="{DynamicResource WarningSoftBrush}"/>
+                    <Setter TargetName="IconText" Property="Foreground" Value="{DynamicResource WarningBrush}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding StateName}" Value="Done">
+                    <Setter TargetName="IconBox" Property="Background" Value="{DynamicResource SuccessSoftBrush}"/>
+                    <Setter TargetName="IconText" Property="Foreground" Value="{DynamicResource SuccessBrush}"/>
+                </DataTrigger>
+                <Trigger SourceName="Bd" Property="IsMouseOver" Value="True">
+                    <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource BorderHoverBrush}"/>
+                    <Setter TargetName="Bd" Property="Background" Value="{DynamicResource HoverBrush}"/>
+                </Trigger>
+                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                    <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                    <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AccentSoftBrush}"/>
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
 
         <!-- ===== 勾選框（CE / TS） ===== -->
         <Style TargetType="CheckBox">
