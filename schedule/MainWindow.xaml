@@ -1,0 +1,584 @@
+<Window x:Class="schedule.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="工作排程表" Height="880" Width="1580" MinHeight="620" MinWidth="1200"
+        WindowStartupLocation="CenterScreen"
+        Icon="Assets/app.ico"
+        Background="{DynamicResource AppBgBrush}"
+        FontFamily="{StaticResource UiFont}"
+        Foreground="{DynamicResource TextBrush}"
+        UseLayoutRounding="True"
+        Loaded="Window_Loaded">
+
+    <Window.Resources>
+        <!-- 卡片：白底、細框、大圓角；陰影放在另一層（見 CardShadow），避免內文被模糊 -->
+        <Style x:Key="Card" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource CardBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource CardBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="16"/>
+            <Setter Property="Padding" Value="18"/>
+        </Style>
+        <Style x:Key="CardShadow" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource CardBrush}"/>
+            <Setter Property="CornerRadius" Value="16"/>
+            <Setter Property="Effect">
+                <Setter.Value>
+                    <DropShadowEffect BlurRadius="28" ShadowDepth="4" Direction="270" Opacity="0.07" Color="#1E1B4B"/>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 輸入框上的灰色提示文字：輸入框為空時才顯示 -->
+        <Style x:Key="Placeholder" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource SubtleBrush}"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="IsHitTestVisible" Value="False"/>
+        </Style>
+
+        <!-- 表單下方的說明文字 -->
+        <Style x:Key="FieldHint" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="{DynamicResource MutedBrush}"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="Margin" Value="2,6,0,0"/>
+        </Style>
+
+        <!-- 上方篩選卡片裡的文字 -->
+        <Style x:Key="FilterLabel" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{DynamicResource MutedBrush}"/>
+        </Style>
+        <Style x:Key="FilterCount" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="{StaticResource DisplayFont}"/>
+            <Setter Property="FontSize" Value="20"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,1,0,0"/>
+        </Style>
+
+        <!-- 表格標題列 -->
+        <Style x:Key="ColumnHeader" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{DynamicResource MutedBrush}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="0,0,8,0"/>
+        </Style>
+
+        <!-- 表格內一般文字 -->
+        <Style x:Key="CellText" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+            <Setter Property="Margin" Value="0,0,8,0"/>
+            <Setter Property="ToolTip" Value="{Binding Text, RelativeSource={RelativeSource Self}}"/>
+        </Style>
+
+        <!-- CE / TS 小標籤 -->
+        <Style x:Key="CertBadge" TargetType="Border">
+            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="Padding" Value="6,1"/>
+            <Setter Property="Margin" Value="0,0,4,0"/>
+            <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}"/>
+        </Style>
+
+        <!-- 日期格：預計 / 實際兩行，依狀態上色 -->
+        <DataTemplate x:Key="MilestoneTemplate">
+            <StackPanel VerticalAlignment="Center" ToolTip="{Binding ToolTip}" Background="Transparent">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="預" FontSize="11" Foreground="{DynamicResource SubtleBrush}" Margin="0,1,6,0"/>
+                    <TextBlock x:Name="Plan" Text="{Binding PlanText}" FontSize="13"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                    <TextBlock Text="實" FontSize="11" Foreground="{DynamicResource SubtleBrush}" Margin="0,1,6,0"/>
+                    <TextBlock x:Name="Actual" Text="{Binding ActualText}" FontSize="13" Foreground="{DynamicResource MutedBrush}"/>
+                </StackPanel>
+            </StackPanel>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding State}" Value="Soon">
+                    <Setter TargetName="Plan" Property="Foreground" Value="{DynamicResource WarningBrush}"/>
+                    <Setter TargetName="Plan" Property="FontWeight" Value="SemiBold"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding State}" Value="Overdue">
+                    <Setter TargetName="Plan" Property="Foreground" Value="{DynamicResource DangerBrush}"/>
+                    <Setter TargetName="Plan" Property="FontWeight" Value="Bold"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding State}" Value="Done">
+                    <Setter TargetName="Actual" Property="Foreground" Value="{DynamicResource SuccessBrush}"/>
+                    <Setter TargetName="Actual" Property="FontWeight" Value="SemiBold"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding State}" Value="Late">
+                    <Setter TargetName="Actual" Property="Foreground" Value="{DynamicResource WarningBrush}"/>
+                    <Setter TargetName="Actual" Property="FontWeight" Value="SemiBold"/>
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
+        <!-- 表格的一列。欄寬與上方標題列（HeaderGrid）一致，改欄寬時兩邊都要改 -->
+        <DataTemplate x:Key="JobTemplate">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="112"/>
+                    <ColumnDefinition Width="104"/>
+                    <ColumnDefinition Width="52"/>
+                    <ColumnDefinition Width="96"/>
+                    <ColumnDefinition Width="72"/>
+                    <ColumnDefinition Width="88"/>
+                    <ColumnDefinition Width="88"/>
+                    <ColumnDefinition Width="88"/>
+                    <ColumnDefinition Width="76"/>
+                    <ColumnDefinition Width="76"/>
+                    <ColumnDefinition Width="76"/>
+                    <ColumnDefinition Width="72"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,8,0">
+                    <TextBlock Text="{Binding WorkOrder}" FontSize="13" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
+                               MaxWidth="84" ToolTip="{Binding WorkOrder}"/>
+                    <TextBlock x:Name="NoteIcon" Text="&#xE70B;" Style="{StaticResource Icon}" FontSize="12" Margin="6,1,0,0"
+                               Foreground="{DynamicResource SubtleBrush}" ToolTip="{Binding Note}" Visibility="Collapsed"/>
+                </StackPanel>
+                <TextBlock Grid.Column="1" Text="{Binding Model}" Style="{StaticResource CellText}"/>
+                <TextBlock Grid.Column="2" Text="{Binding Quantity}" Style="{StaticResource CellText}" TextAlignment="Right" Margin="0,0,14,0"/>
+                <TextBlock Grid.Column="3" Text="{Binding Customer}" Style="{StaticResource CellText}"/>
+                <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border x:Name="CE" Style="{StaticResource CertBadge}" Visibility="Collapsed">
+                        <TextBlock Text="CE" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource AccentTextBrush}"/>
+                    </Border>
+                    <Border x:Name="TS" Style="{StaticResource CertBadge}" Visibility="Collapsed">
+                        <TextBlock Text="TS" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource AccentTextBrush}"/>
+                    </Border>
+                    <TextBlock x:Name="NoCert" Text="—" FontSize="13" Foreground="{DynamicResource SubtleBrush}" Visibility="Collapsed"/>
+                </StackPanel>
+                <ContentPresenter Grid.Column="5" Content="{Binding Material}" ContentTemplate="{StaticResource MilestoneTemplate}"/>
+                <ContentPresenter Grid.Column="6" Content="{Binding Wiring}" ContentTemplate="{StaticResource MilestoneTemplate}"/>
+                <ContentPresenter Grid.Column="7" Content="{Binding Delivery}" ContentTemplate="{StaticResource MilestoneTemplate}"/>
+                <TextBlock Grid.Column="8" Text="{Binding InnerWiring}" Style="{StaticResource CellText}"/>
+                <TextBlock Grid.Column="9" Text="{Binding OuterWiring}" Style="{StaticResource CellText}"/>
+                <TextBlock Grid.Column="10" Text="{Binding Consumables}" Style="{StaticResource CellText}"/>
+                <Border x:Name="Pill" Grid.Column="11" CornerRadius="9" Padding="9,3" HorizontalAlignment="Left" VerticalAlignment="Center"
+                        Background="{DynamicResource AccentSoftBrush}">
+                    <TextBlock x:Name="PillText" Text="{Binding StatusText}" FontSize="12" FontWeight="SemiBold"
+                               Foreground="{DynamicResource AccentTextBrush}"/>
+                </Border>
+            </Grid>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding HasNote}" Value="True">
+                    <Setter TargetName="NoteIcon" Property="Visibility" Value="Visible"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding HasCE}" Value="True">
+                    <Setter TargetName="CE" Property="Visibility" Value="Visible"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding HasTS}" Value="True">
+                    <Setter TargetName="TS" Property="Visibility" Value="Visible"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding NoCert}" Value="True">
+                    <Setter TargetName="NoCert" Property="Visibility" Value="Visible"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Status}" Value="Overdue">
+                    <Setter TargetName="Pill" Property="Background" Value="{DynamicResource DangerSoftBrush}"/>
+                    <Setter TargetName="PillText" Property="Foreground" Value="{DynamicResource DangerBrush}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Status}" Value="Done">
+                    <Setter TargetName="Pill" Property="Background" Value="{DynamicResource SuccessSoftBrush}"/>
+                    <Setter TargetName="PillText" Property="Foreground" Value="{DynamicResource SuccessBrush}"/>
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+    </Window.Resources>
+
+    <Grid Margin="28,22,28,14">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- ===== 標題列 ===== -->
+        <DockPanel Grid.Row="0" Margin="0,0,0,18">
+            <!-- 工具列：一條白色膠囊裡放幾個透明按鈕 -->
+            <Border DockPanel.Dock="Right" VerticalAlignment="Center" Background="{DynamicResource CardBrush}"
+                    BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="1" CornerRadius="14" Padding="4">
+                <StackPanel Orientation="Horizontal">
+                    <!-- 主題：按一下依序切換 跟隨系統 → 淺色 → 深色（圖示與提示文字由程式設定） -->
+                    <Button x:Name="ThemeButton" Style="{StaticResource GhostButton}" Padding="10,8" Click="Theme_Click">
+                        <TextBlock x:Name="ThemeIcon" Style="{StaticResource Icon}" Text="&#xE770;"/>
+                    </Button>
+                    <Border Width="1" Margin="4,8" Background="{DynamicResource LineBrush}"/>
+                    <Button Style="{StaticResource GhostButton}" Click="Export_Click">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE898;" Style="{StaticResource Icon}" Margin="0,0,8,0"/>
+                            <TextBlock Text="匯出 Excel"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource GhostButton}" Click="Import_Click">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE896;" Style="{StaticResource Icon}" Margin="0,0,8,0"/>
+                            <TextBlock Text="匯入 Excel"/>
+                        </StackPanel>
+                    </Button>
+                    <Border Width="1" Margin="4,8" Background="{DynamicResource LineBrush}"/>
+                    <Button Style="{StaticResource GhostButton}" ToolTip="在桌面建立（或修復）工作排程表的捷徑" Click="Shortcut_Click">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE7F4;" Style="{StaticResource Icon}" Margin="0,0,8,0"/>
+                            <TextBlock Text="桌面捷徑"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource GhostButton}" Click="CheckUpdate_Click">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE895;" Style="{StaticResource Icon}" Margin="0,0,8,0"/>
+                            <TextBlock Text="檢查更新"/>
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </Border>
+
+            <Border Width="46" Height="46" CornerRadius="14" Background="{DynamicResource AccentGradient}">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="14" ShadowDepth="3" Direction="270" Opacity="0.25" Color="#4F46E5"/>
+                </Border.Effect>
+                <TextBlock Text="&#xE787;" Style="{StaticResource Icon}" FontSize="21" Foreground="White"
+                           HorizontalAlignment="Center"/>
+            </Border>
+            <StackPanel Margin="14,0,0,0" VerticalAlignment="Center">
+                <TextBlock Text="工作排程表" FontFamily="{StaticResource DisplayFont}" FontSize="22" FontWeight="SemiBold"/>
+                <TextBlock x:Name="CountText" FontSize="12" Foreground="{DynamicResource MutedBrush}" Margin="1,1,0,0"/>
+            </StackPanel>
+        </DockPanel>
+
+        <!-- ===== 主內容 ===== -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="20"/>
+                <ColumnDefinition Width="410"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- 左：篩選 + 搜尋 + 表格 -->
+            <Border Grid.Column="0" Style="{StaticResource CardShadow}"/>
+            <Border Grid.Column="0" Style="{StaticResource Card}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- 狀態篩選卡片（數字由程式設定） -->
+                    <WrapPanel Grid.Row="0" Margin="0,0,0,14">
+                        <RadioButton x:Name="FilterAll" Style="{StaticResource FilterCard}" GroupName="Filter" Tag="All"
+                                     IsChecked="True" Checked="Filter_Checked">
+                            <StackPanel>
+                                <TextBlock Text="全部" Style="{StaticResource FilterLabel}"/>
+                                <TextBlock x:Name="AllCount" Text="0" Style="{StaticResource FilterCount}"/>
+                            </StackPanel>
+                        </RadioButton>
+                        <RadioButton Style="{StaticResource FilterCard}" GroupName="Filter" Tag="Active" Checked="Filter_Checked">
+                            <StackPanel>
+                                <TextBlock Text="進行中" Style="{StaticResource FilterLabel}"/>
+                                <TextBlock x:Name="ActiveCount" Text="0" Style="{StaticResource FilterCount}" Foreground="{DynamicResource AccentBrush}"/>
+                            </StackPanel>
+                        </RadioButton>
+                        <RadioButton Style="{StaticResource FilterCard}" GroupName="Filter" Tag="Overdue" Checked="Filter_Checked"
+                                     ToolTip="材料入場、配電或交期任一項過了預計日期還沒完成">
+                            <StackPanel>
+                                <TextBlock Text="逾期" Style="{StaticResource FilterLabel}"/>
+                                <TextBlock x:Name="OverdueCount" Text="0" Style="{StaticResource FilterCount}" Foreground="{DynamicResource DangerBrush}"/>
+                            </StackPanel>
+                        </RadioButton>
+                        <RadioButton Style="{StaticResource FilterCard}" GroupName="Filter" Tag="DueSoon" Checked="Filter_Checked"
+                                     ToolTip="還沒交貨、預計交期在今天到 7 天內">
+                            <StackPanel>
+                                <TextBlock Text="7 天內交貨" Style="{StaticResource FilterLabel}"/>
+                                <TextBlock x:Name="DueSoonCount" Text="0" Style="{StaticResource FilterCount}" Foreground="{DynamicResource WarningBrush}"/>
+                            </StackPanel>
+                        </RadioButton>
+                        <RadioButton Style="{StaticResource FilterCard}" GroupName="Filter" Tag="Done" Checked="Filter_Checked"
+                                     ToolTip="已填實際交貨日期">
+                            <StackPanel>
+                                <TextBlock Text="已完成" Style="{StaticResource FilterLabel}"/>
+                                <TextBlock x:Name="DoneCount" Text="0" Style="{StaticResource FilterCount}" Foreground="{DynamicResource SuccessBrush}"/>
+                            </StackPanel>
+                        </RadioButton>
+                    </WrapPanel>
+
+                    <!-- 搜尋 + 排序 -->
+                    <DockPanel Grid.Row="1" Margin="0,0,0,10">
+                        <ComboBox x:Name="SortBox" DockPanel.Dock="Right" Width="180" Margin="12,0,0,0"
+                                  SelectedIndex="0" SelectionChanged="SortBox_SelectionChanged">
+                            <ComboBoxItem Content="依預計交期" Tag="DeliveryPlan"/>
+                            <ComboBoxItem Content="依預計材料入場" Tag="MaterialPlan"/>
+                            <ComboBoxItem Content="依預計配電日期" Tag="WiringPlan"/>
+                            <ComboBoxItem Content="依工令" Tag="WorkOrder"/>
+                            <ComboBoxItem Content="依客戶" Tag="Customer"/>
+                        </ComboBox>
+                        <Grid>
+                            <TextBox x:Name="SearchBox" Padding="38,9,12,9" TextChanged="SearchBox_TextChanged"/>
+                            <TextBlock Text="&#xE721;" Style="{StaticResource Icon}" Foreground="{DynamicResource SubtleBrush}"
+                                       Margin="14,0,0,0" IsHitTestVisible="False"/>
+                            <TextBlock Text="搜尋工令、機種、客戶、人員、備註…" Margin="40,0,0,0">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock" BasedOn="{StaticResource Placeholder}">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Text, ElementName=SearchBox}" Value="">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </Grid>
+                    </DockPanel>
+
+                    <!-- 顏色說明 -->
+                    <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="2,0,0,10">
+                        <Ellipse Width="8" Height="8" Fill="{DynamicResource SuccessBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <TextBlock Text="準時完成" FontSize="12" Foreground="{DynamicResource MutedBrush}" Margin="0,0,16,0"/>
+                        <Ellipse Width="8" Height="8" Fill="{DynamicResource WarningBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <TextBlock Text="3 天內到期 / 延遲完成" FontSize="12" Foreground="{DynamicResource MutedBrush}" Margin="0,0,16,0"/>
+                        <Ellipse Width="8" Height="8" Fill="{DynamicResource DangerBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <TextBlock Text="逾期未完成" FontSize="12" Foreground="{DynamicResource MutedBrush}" Margin="0,0,16,0"/>
+                        <TextBlock Text="（滑鼠移到日期上可看完整日期）" FontSize="12" Foreground="{DynamicResource SubtleBrush}"/>
+                    </StackPanel>
+
+                    <!-- 表格：視窗太窄時可以左右捲動，標題列跟著一起捲 -->
+                    <ScrollViewer Grid.Row="3" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+
+                            <Border Grid.Row="0" Background="{DynamicResource InputBgBrush}" CornerRadius="10" Padding="12,9" Margin="0,0,4,6">
+                                <Grid x:Name="HeaderGrid">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="112"/>
+                                        <ColumnDefinition Width="104"/>
+                                        <ColumnDefinition Width="52"/>
+                                        <ColumnDefinition Width="96"/>
+                                        <ColumnDefinition Width="72"/>
+                                        <ColumnDefinition Width="88"/>
+                                        <ColumnDefinition Width="88"/>
+                                        <ColumnDefinition Width="88"/>
+                                        <ColumnDefinition Width="76"/>
+                                        <ColumnDefinition Width="76"/>
+                                        <ColumnDefinition Width="76"/>
+                                        <ColumnDefinition Width="72"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="工令" Style="{StaticResource ColumnHeader}"/>
+                                    <TextBlock Grid.Column="1" Text="機種" Style="{StaticResource ColumnHeader}"/>
+                                    <TextBlock Grid.Column="2" Text="數量" Style="{StaticResource ColumnHeader}" TextAlignment="Right" Margin="0,0,14,0"/>
+                                    <TextBlock Grid.Column="3" Text="客戶" Style="{StaticResource ColumnHeader}"/>
+                                    <TextBlock Grid.Column="4" Text="CE / TS" Style="{StaticResource ColumnHeader}"/>
+                                    <TextBlock Grid.Column="5" Text="材料入場" Style="{StaticResource ColumnHeader}"/>
+                                    <TextBlock Grid.Column="6" Text="配電" Style="{StaticResource ColumnHeader}"/>
+                                    <TextBlock Grid.Column="7" Text="交期" Style="{StaticResource ColumnHeader}"/>
+                                    <TextBlock Grid.Column="8" Text="盤內配電" Style="{StaticResource ColumnHeader}"/>
+                                    <TextBlock Grid.Column="9" Text="盤外配電" Style="{StaticResource ColumnHeader}"/>
+                                    <TextBlock Grid.Column="10" Text="耗材提供" Style="{StaticResource ColumnHeader}"/>
+                                    <TextBlock Grid.Column="11" Text="狀態" Style="{StaticResource ColumnHeader}"/>
+                                </Grid>
+                            </Border>
+
+                            <ListBox x:Name="JobList" Grid.Row="1" Style="{StaticResource EntryListStyle}"
+                                     ItemTemplate="{StaticResource JobTemplate}" SelectionMode="Single"
+                                     SelectionChanged="JobList_SelectionChanged"/>
+
+                            <!-- 空清單提示 -->
+                            <StackPanel Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False">
+                                <Border Width="64" Height="64" CornerRadius="20" Background="{DynamicResource AccentSoftBrush}"
+                                        HorizontalAlignment="Center" Margin="0,0,0,14">
+                                    <TextBlock Text="&#xE787;" Style="{StaticResource Icon}" FontSize="26"
+                                               Foreground="{DynamicResource AccentBrush}" HorizontalAlignment="Center"/>
+                                </Border>
+                                <TextBlock x:Name="EmptyText" TextAlignment="Center" LineHeight="20"
+                                           Foreground="{DynamicResource MutedBrush}"/>
+                                <StackPanel.Style>
+                                    <Style TargetType="StackPanel">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Items.Count, ElementName=JobList}" Value="0">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </StackPanel.Style>
+                            </StackPanel>
+                        </Grid>
+                    </ScrollViewer>
+                </Grid>
+            </Border>
+
+            <!-- 右：編輯 -->
+            <Border Grid.Column="2" Style="{StaticResource CardShadow}"/>
+            <Border Grid.Column="2" Style="{StaticResource Card}" Padding="20,20,20,18">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <DockPanel Margin="0,0,0,18">
+                        <Button DockPanel.Dock="Right" Style="{StaticResource GhostButton}" Padding="10,6" FontSize="12"
+                                ToolTip="清空表單，準備新增另一筆工令" Click="NewForm_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE710;" Style="{StaticResource Icon}" FontSize="12" Margin="0,0,6,0"/>
+                                <TextBlock Text="新工令"/>
+                            </StackPanel>
+                        </Button>
+                        <Border Width="32" Height="32" CornerRadius="10" Background="{DynamicResource AccentSoftBrush}">
+                            <TextBlock Text="&#xE8A5;" Style="{StaticResource Icon}" FontSize="15"
+                                       Foreground="{DynamicResource AccentBrush}" HorizontalAlignment="Center"/>
+                        </Border>
+                        <TextBlock x:Name="FormTitle" Text="新增工令" FontFamily="{StaticResource DisplayFont}"
+                                   FontSize="17" FontWeight="SemiBold" VerticalAlignment="Center" Margin="10,0,0,0"
+                                   TextTrimming="CharacterEllipsis"/>
+                    </DockPanel>
+
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="0,0,8,0">
+                            <Grid Margin="0,0,0,14">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="12"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Text="工令 *" Style="{StaticResource FieldLabel}"/>
+                                    <TextBox x:Name="WorkOrderBox"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="機種 *" Style="{StaticResource FieldLabel}"/>
+                                    <TextBox x:Name="ModelBox"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <Grid Margin="0,0,0,14">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="12"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Text="數量 *" Style="{StaticResource FieldLabel}"/>
+                                    <TextBox x:Name="QuantityBox"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="客戶" Style="{StaticResource FieldLabel}"/>
+                                    <TextBox x:Name="CustomerBox"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <TextBlock Text="認證" Style="{StaticResource FieldLabel}"/>
+                            <StackPanel Orientation="Horizontal" Margin="2,2,0,16">
+                                <CheckBox x:Name="CEBox" Content="CE" Margin="0,0,28,0"/>
+                                <CheckBox x:Name="TSBox" Content="TS"/>
+                            </StackPanel>
+
+                            <!-- 日期：預計 / 實際完成分開填 -->
+                            <Grid Margin="0,0,0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="64"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="10"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Grid.Column="1" Text="預計" Style="{StaticResource FieldLabel}"/>
+                                <TextBlock Grid.Column="3" Text="實際完成" Style="{StaticResource FieldLabel}"/>
+
+                                <TextBlock Grid.Row="1" Text="材料入場" FontSize="13" VerticalAlignment="Center"/>
+                                <TextBox x:Name="MaterialPlanBox" Grid.Row="1" Grid.Column="1" Margin="0,0,0,10" ToolTip="例如 2026/10/06，或只打 10/6"/>
+                                <Grid Grid.Row="1" Grid.Column="3" Margin="0,0,0,10">
+                                    <TextBox x:Name="MaterialActualBox" Padding="12,8,40,8" ToolTip="材料實際進場的日期，還沒進場就空白"/>
+                                    <Button Content="&#xE73E;" Style="{StaticResource FieldIconButton}" HorizontalAlignment="Right"
+                                            Margin="0,0,4,0" ToolTip="今天完成" Tag="MaterialActualBox" Click="Today_Click"/>
+                                </Grid>
+
+                                <TextBlock Grid.Row="2" Text="配電" FontSize="13" VerticalAlignment="Center"/>
+                                <TextBox x:Name="WiringPlanBox" Grid.Row="2" Grid.Column="1" Margin="0,0,0,10" ToolTip="例如 2026/10/06，或只打 10/6"/>
+                                <Grid Grid.Row="2" Grid.Column="3" Margin="0,0,0,10">
+                                    <TextBox x:Name="WiringActualBox" Padding="12,8,40,8" ToolTip="配電實際完成的日期，還沒完成就空白"/>
+                                    <Button Content="&#xE73E;" Style="{StaticResource FieldIconButton}" HorizontalAlignment="Right"
+                                            Margin="0,0,4,0" ToolTip="今天完成" Tag="WiringActualBox" Click="Today_Click"/>
+                                </Grid>
+
+                                <TextBlock Grid.Row="3" Text="交期" FontSize="13" VerticalAlignment="Center"/>
+                                <TextBox x:Name="DeliveryPlanBox" Grid.Row="3" Grid.Column="1" Margin="0,0,0,10" ToolTip="例如 2026/10/06，或只打 10/6"/>
+                                <Grid Grid.Row="3" Grid.Column="3" Margin="0,0,0,10">
+                                    <TextBox x:Name="DeliveryActualBox" Padding="12,8,40,8" ToolTip="實際交貨的日期；填了這格，這筆工令就算完成"/>
+                                    <Button Content="&#xE73E;" Style="{StaticResource FieldIconButton}" HorizontalAlignment="Right"
+                                            Margin="0,0,4,0" ToolTip="今天完成" Tag="DeliveryActualBox" Click="Today_Click"/>
+                                </Grid>
+                            </Grid>
+                            <TextBlock Text="日期可打 2026/10/06 或只打 10/6（今年）。按 ✓ 填入今天；還沒完成就留空白。"
+                                       Style="{StaticResource FieldHint}" Margin="2,0,0,16"/>
+
+                            <Grid Margin="0,0,0,14">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="12"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Text="盤內配電" Style="{StaticResource FieldLabel}"/>
+                                    <TextBox x:Name="InnerWiringBox"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="盤外配電" Style="{StaticResource FieldLabel}"/>
+                                    <TextBox x:Name="OuterWiringBox"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <TextBlock Text="耗材提供" Style="{StaticResource FieldLabel}"/>
+                            <TextBox x:Name="ConsumablesBox" Margin="0,0,0,14" ToolTip="耗材由誰提供，例如：公司、客戶、廠商名稱"/>
+
+                            <TextBlock Text="備註" Style="{StaticResource FieldLabel}"/>
+                            <TextBox x:Name="NoteBox" Height="64" AcceptsReturn="True"
+                                     TextWrapping="Wrap" VerticalScrollBarVisibility="Auto"/>
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <!-- 操作按鈕固定在卡片底部，表單再長也不會被捲出畫面 -->
+                    <UniformGrid Grid.Row="2" Columns="3" Rows="1" Margin="0,16,0,0">
+                        <Button Style="{StaticResource PrimaryButton}" Margin="0,0,5,0" Padding="10,10" Click="Add_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE710;" Style="{StaticResource Icon}" FontSize="13" Margin="0,0,8,0"/>
+                                <TextBlock Text="新增"/>
+                            </StackPanel>
+                        </Button>
+                        <Button Margin="5,0,5,0" Padding="10,10" Click="Save_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE74E;" Style="{StaticResource Icon}" FontSize="13" Margin="0,0,8,0"/>
+                                <TextBlock Text="儲存修改"/>
+                            </StackPanel>
+                        </Button>
+                        <Button Style="{StaticResource DangerButton}" Margin="5,0,0,0" Padding="10,10" Click="Delete_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE74D;" Style="{StaticResource Icon}" FontSize="13" Margin="0,0,8,0"/>
+                                <TextBlock Text="刪除"/>
+                            </StackPanel>
+                        </Button>
+                    </UniformGrid>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- ===== 頁尾 ===== -->
+        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="4,12,0,0">
+            <Ellipse Width="7" Height="7" Fill="#10B981" VerticalAlignment="Center" Margin="0,0,8,0"/>
+            <TextBlock x:Name="StatusText" FontSize="12" Foreground="{DynamicResource MutedBrush}" VerticalAlignment="Center"/>
+        </StackPanel>
+    </Grid>
+</Window>
