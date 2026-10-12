@@ -2,8 +2,8 @@ using schedule.Models;
 
 namespace schedule.Services
 {
-    /// <summary>有下拉選單的欄位。盤內、盤外配電共用同一份人員清單。</summary>
-    public enum HistoryField { Model, Customer, People, Consumables }
+    /// <summary>有下拉選單的欄位。盤內、盤外配電、流程卡上的負責人 / 確認人 / 檢驗員共用同一份人員清單。</summary>
+    public enum HistoryField { Model, Customer, People, Consumables, Sales }
 
     /// <summary>每個欄位之前輸入過的值，最近用過的排在最前面。</summary>
     public class InputHistoryData
@@ -12,6 +12,7 @@ namespace schedule.Services
         public List<string> Customers { get; set; } = new();
         public List<string> People { get; set; } = new();
         public List<string> Consumables { get; set; } = new();
+        public List<string> Sales { get; set; } = new();
     }
 
     /// <summary>
@@ -39,6 +40,7 @@ namespace schedule.Services
             HistoryField.Model => history.Models,
             HistoryField.Customer => history.Customers,
             HistoryField.People => history.People,
+            HistoryField.Sales => history.Sales ??= new(),
             _ => history.Consumables,
         };
 
@@ -50,6 +52,17 @@ namespace schedule.Services
             Remember(history.People, job.OuterWiring);
             Remember(history.People, job.InnerWiring);
             Remember(history.Consumables, job.Consumables);
+            Remember(history.Sales ??= new(), job.Sales);
+        }
+
+        /// <summary>流程卡存檔時呼叫：站別負責人、確認人、檢驗員、異常負責人都記到人員清單。</summary>
+        public static void RememberRunCard(InputHistoryData history, Job job)
+        {
+            var names = (job.Steps ?? new()).SelectMany(s => new[] { s.Owner, s.Signer })
+                .Concat((job.Checks ?? new()).Select(c => c.Inspector))
+                .Concat((job.Issues ?? new()).Select(i => i.Owner))
+                .Reverse(); // 流程前面的站排在下拉選單前面
+            foreach (var name in names) Remember(history.People, name);
         }
 
         public static void Remember(List<string> items, string? value)

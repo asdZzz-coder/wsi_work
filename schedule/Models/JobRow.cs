@@ -39,7 +39,27 @@ namespace schedule.Models
         public MilestoneCell Delivery { get; }
 
         public JobStatus Status { get; }
-        public string StatusText => ScheduleRules.StatusText(Status);
+
+        /// <summary>暫停中（還沒交貨）：狀態標籤改顯示「暫停」。</summary>
+        public bool OnHold => RunCardRules.IsOnHold(Job);
+        public string StatusText => OnHold ? "暫停" : ScheduleRules.StatusText(Status);
+        public string StatusToolTip
+        {
+            get
+            {
+                var lines = new List<string> { ScheduleRules.StatusText(Status) };
+                lines.AddRange(RunCardRules.AttentionReasons(Job));
+                lines.Add($"品管檢驗：{RunCardRules.CheckSummary(Job)}");
+                return string.Join("\n", lines);
+            }
+        }
+
+        /// <summary>目前站別與進度，例如「配電 · 3/8」。</summary>
+        public string ProgressText => RunCardRules.ProgressText(Job);
+        public bool NeedsAttention => RunCardRules.NeedsAttention(Job);
+
+        public JobPriority Priority => Job.Priority;
+        public string PriorityText => RunCardRules.PriorityText(Job.Priority);
 
         // 螢幕閱讀器與 UI 自動化讀到的名稱
         public override string ToString() => WorkOrder;

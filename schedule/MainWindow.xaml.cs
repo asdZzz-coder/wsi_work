@@ -23,6 +23,12 @@ namespace schedule
         // 重建清單時會觸發 SelectionChanged，這段期間不要把表單清掉
         private bool _refreshing;
 
+        // 「複製工令」時，新工令要沿用的流程站別與檢驗項目；null 表示用預設的
+        private Job? _template;
+
+        // 表單剛填入時的內容，用來判斷有沒有改過還沒存
+        private string _formSnapshot = "";
+
         public MainWindow()
         {
             InitializeComponent();
@@ -30,6 +36,7 @@ namespace schedule
             Height = Math.Min(Height, SystemParameters.WorkArea.Height - 20);
             Width = Math.Min(Width, SystemParameters.WorkArea.Width - 20);
             _data = DataStore.Load();
+            foreach (var job in _data.Jobs) RunCardRules.Ensure(job); // 舊資料補上預設的流程卡
             InputHistory.Ensure(_data);
             foreach (var box in SuggestBoxes.Keys) box.ItemRemoved += OnSuggestionRemoved;
             UpdateSuggestions();
@@ -40,7 +47,7 @@ namespace schedule
             RestoreView(); // 上次關閉時看的檢視
             ClearForm();
             Refresh();
-            Title = _updater.IsRelease ?$"{AppTitle} v{_updater.CurrentVersion}" : $"{AppTitle}（開發版）";
+            Title = _updater.IsRelease ? $"{AppTitle} v{_updater.CurrentVersion}" : $"{AppTitle}（開發版）";
             StatusText.Text = $"版本 {_updater.CurrentVersion}";
             ThemeService.ThemeChanged += OnThemeChanged; // 切換主題（或系統深淺色改變）時更新標題列與按鈕
             UpdateThemeButton();
@@ -187,6 +194,7 @@ namespace schedule
             OverdueCount.Text = overdue.ToString();
             DueSoonCount.Text = jobs.Count(j => ScheduleRules.Matches(j, JobFilter.DueSoon, today)).ToString();
             DoneCount.Text = jobs.Count(j => ScheduleRules.Matches(j, JobFilter.Done, today)).ToString();
+            AttentionCount.Text = jobs.Count(j => ScheduleRules.Matches(j, JobFilter.Attention, today)).ToString();
 
             CountText.Text = jobs.Count == 0 ? "還沒有工令"
                 : overdue > 0 ? $"共 {jobs.Count} 筆工令，{overdue} 筆逾期"
@@ -365,6 +373,11 @@ namespace schedule
             ModelBox.Text = j.Model;
             QuantityBox.Text = j.Quantity > 0 ? j.Quantity.ToString() : "";
             CustomerBox.Text = j.Customer;
+            ProjectBox.Text = j.ProjectName;
+            OrderNoBox.Text = j.OrderNo;
+            DrawingNoBox.Text = j.DrawingNo;
+            SalesBox.Text = j.Sales;
+            PriorityBox.SelectedIndex = (int)j.Priority;
             CEBox.IsChecked = j.HasCE;
             TSBox.IsChecked = j.HasTS;
             MaterialPlanBox.Text = Date(j.MaterialPlan);
@@ -379,11 +392,26 @@ namespace schedule
             OuterWiringBox.Text = j.OuterWiring;
             ConsumablesBox.Text = j.Consumables;
             NoteBox.Text = j.Note;
+            _formSnapshot = FormSnapshot();
         }
+
+        /// <summary>表單目前的內容（比較用）。</summary>
+        private string FormSnapshot() => string.Join("\u001F", new object?[]
+        {
+            WorkOrderBox.Text.Trim(), ModelBox.Text.Trim(), QuantityBox.Text.Trim(), CustomerBox.Text.Trim(),
+            ProjectBox.Text.Trim(), OrderNoBox.Text.Trim(), DrawingNoBox.Text.Trim(), SalesBox.Text.Trim(), PriorityBox.SelectedIndex,
+            CEBox.IsChecked == true, TSBox.IsChecked == true,
+            MaterialPlanBox.Text.Trim(), MaterialActualBox.Text.Trim(), WiringPlanBox.Text.Trim(), WiringActualBox.Text.Trim(),
+            DispatchPlanBox.Text.Trim(), DispatchActualBox.Text.Trim(), DeliveryPlanBox.Text.Trim(), DeliveryActualBox.Text.Trim(),
+            InnerWiringBox.Text.Trim(), OuterWiringBox.Text.Trim(), ConsumablesBox.Text.Trim(), NoteBox.Text.TrimEnd(),
+        });
+
+        private bool FormChanged => _selected != null && FormSnapshot() != _formSnapshot;
 
         private void ClearForm()
         {
             _selected = null;
+            _template = null;
             FormTitle.Text = "新增工令";
             foreach (var box in new[]
                      {
@@ -391,10 +419,13 @@ namespace schedule
                          MaterialPlanBox, MaterialActualBox, WiringPlanBox, WiringActualBox,
                          DispatchPlanBox, DispatchActualBox, DeliveryPlanBox, DeliveryActualBox,
                          InnerWiringBox, OuterWiringBox, ConsumablesBox, NoteBox,
+                         ProjectBox, OrderNoBox, DrawingNoBox, SalesBox,
                      })
                 box.Clear();
             CEBox.IsChecked = false;
             TSBox.IsChecked = false;
+            PriorityBox.SelectedIndex = 0;
+            _formSnapshot = FormSnapshot();
         }
 
         // ---------- 下拉選單：記住輸入過的機種、客戶、人員、耗材提供 ----------
@@ -406,6 +437,7 @@ namespace schedule
             [InnerWiringBox] = HistoryField.People,
             [OuterWiringBox] = HistoryField.People,
             [ConsumablesBox] = HistoryField.Consumables,
+            [SalesBox] = HistoryField.Sales,
         };
 
         private void UpdateSuggestions()
@@ -454,7 +486,23 @@ namespace schedule
                 OuterWiring = OuterWiringBox.Text.Trim(),
                 Consumables = ConsumablesBox.Text.Trim(),
                 Note = NoteBox.Text.TrimEnd(),
+                ProjectName = ProjectBox.Text.Trim(),
+                OrderNo = OrderNoBox.Text.Trim(),
+                DrawingNo = DrawingNoBox.Text.Trim(),
+                Sales = SalesBox.Text.Trim(),
+                Priority = (JobPriority)Math.Max(PriorityBox.SelectedIndex, 0),
             };
+
+            // 流程卡在流程卡視窗裡編輯，這裡沿用原本的（新工令用預設的，複製來的用複本的）
+            if ((editing ?? _template) is { } source)
+            {
+                var copy = RunCardRules.Clone(source);
+                job.Steps = copy.Steps;
+                job.Checks = copy.Checks;
+                job.Issues = editing != null ? copy.Issues : new();
+                job.HoldReason = editing != null ? copy.HoldReason : "";
+            }
+            RunCardRules.Ensure(job);
 
             var dates = new (TextBox Box, string Name, Action<DateTime?> Set)[]
             {
@@ -506,6 +554,7 @@ namespace schedule
             if (job == null) return;
             _data.Jobs.Add(job);
             InputHistory.Remember(InputHistory.Ensure(_data), job);
+            _template = null;
             _selected = job;
             FillForm(job);
             EnsureVisible(job);
@@ -545,6 +594,86 @@ namespace schedule
             _data.Jobs.Remove(target);
             ClearForm();
             Persist($"已刪除工令「{target.WorkOrder}」");
+        }
+
+        // ---------- 流程卡 / 列印 / 複製工令 ----------
+
+        private void RunCard_Click(object sender, RoutedEventArgs e)
+        {
+            if (_selected is not { } job)
+            {
+                MessageBox.Show("請先在左邊選一筆工令。新的工令請先按「新增」，再打開流程卡。", "流程卡");
+                return;
+            }
+            OpenRunCard(job);
+        }
+
+        private void JobList_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            // 只有點在某一列上才打開（點捲軸、空白處不算）
+            var item = Views.PopupDismisser.FindAncestor<ListBoxItem>(e.OriginalSource as DependencyObject);
+            if (item?.DataContext is JobRow row) OpenRunCard(row.Job);
+        }
+
+        private void OpenRunCard(Job job)
+        {
+            // 表單上這筆工令有改過還沒存：先問，不然流程卡存檔後會把表單蓋掉
+            if (ReferenceEquals(job, _selected) && FormChanged)
+            {
+                var answer = MessageBox.Show($"表單上「{job.WorkOrder}」的修改還沒儲存，要先儲存嗎？\n\n按「否」會放棄表單上的修改。", "流程卡",
+                    MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
+                if (answer == MessageBoxResult.Cancel) return;
+                if (answer == MessageBoxResult.Yes)
+                {
+                    Save_Click(this, new RoutedEventArgs());
+                    if (FormChanged || _selected == null) return; // 沒存成功
+                    job = _selected;
+                }
+                else FillForm(job);
+            }
+
+            var people = InputHistory.Items(InputHistory.Ensure(_data), HistoryField.People).ToList();
+            var window = new Views.RunCardWindow(job, people) { Owner = this };
+            window.ShowDialog();
+            if (window.Result is not { } updated) return;
+
+            int index = _data.Jobs.IndexOf(job);
+            if (index < 0) return;
+            _data.Jobs[index] = updated;
+            InputHistory.RememberRunCard(InputHistory.Ensure(_data), updated);
+            _selected = updated;
+            FillForm(updated);
+            Persist($"已儲存工令「{updated.WorkOrder}」的流程卡（{RunCardRules.ProgressText(updated)}）");
+        }
+
+        private void PrintRunCard_Click(object sender, RoutedEventArgs e)
+        {
+            if (_selected is not { } job)
+            {
+                MessageBox.Show("請先在左邊選一筆要列印的工令。", "列印流程卡");
+                return;
+            }
+            if (FormChanged)
+                MessageBox.Show("表單上還有修改沒儲存，列印的是已經存好的內容。", "列印流程卡", MessageBoxButton.OK, MessageBoxImage.Information);
+            Views.RunCardPrinter.Print(RunCardRules.Clone(job), this, s => StatusText.Text = s);
+        }
+
+        private void Copy_Click(object sender, RoutedEventArgs e)
+        {
+            if (_selected is not { } source)
+            {
+                MessageBox.Show("請先在左邊選一筆要複製的工令。", "複製工令");
+                return;
+            }
+            var copy = RunCardRules.CopyAsNew(source);
+            JobList.SelectedItem = null;
+            ClearForm();
+            FillForm(copy);
+            _template = copy;
+            WorkOrderBox.Clear();
+            FormTitle.Text = $"新增工令（複製自 {source.WorkOrder}）";
+            WorkOrderBox.Focus();
+            StatusText.Text = $"已複製「{source.WorkOrder}」的資料和流程，填好新的工令號碼與日期後按「新增」";
         }
 
         private void Persist(string status)
@@ -592,11 +721,10 @@ namespace schedule
             var dlg = new OpenFileDialog { Filter = "Excel 檔案 (*.xlsx)|*.xlsx" };
             if (dlg.ShowDialog() != true) return;
 
-            List<Job> imported;
-            int skipped;
+            ExcelImport result;
             try
             {
-                (imported, skipped) = ExcelService.Import(dlg.FileName);
+                result = ExcelService.ImportWorkbook(dlg.FileName);
             }
             catch (Exception ex)
             {
@@ -604,6 +732,7 @@ namespace schedule
                 return;
             }
 
+            var (imported, skipped) = (result.Jobs, result.Skipped);
             if (imported.Count == 0)
             {
                 var why = skipped > 0 ? $"有 {skipped} 列的數量或日期讀不懂。\n\n" : "";
@@ -620,10 +749,15 @@ namespace schedule
                 title, MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
             if (mode == MessageBoxResult.Cancel) return;
 
-            var (added, updated) = ScheduleRules.Merge(_data.Jobs, imported, replace: mode == MessageBoxResult.No);
+            var (added, updated) = ScheduleRules.Merge(_data.Jobs, imported, replace: mode == MessageBoxResult.No, keep: result.KeepMissing);
+            foreach (var job in _data.Jobs) RunCardRules.Ensure(job);
             // Excel 裡的值也加進下拉選單（第一列排最前面）
             var history = InputHistory.Ensure(_data);
-            for (int i = imported.Count - 1; i >= 0; i--) InputHistory.Remember(history, imported[i]);
+            for (int i = imported.Count - 1; i >= 0; i--)
+            {
+                InputHistory.Remember(history, imported[i]);
+                InputHistory.RememberRunCard(history, imported[i]);
+            }
 
             ClearForm();
             Persist($"匯入完成，新增 {added} 筆、更新 {updated} 筆");

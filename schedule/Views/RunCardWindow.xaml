@@ -1,0 +1,544 @@
+<Window x:Class="schedule.Views.RunCardWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:views="clr-namespace:schedule.Views"
+        Title="流程卡" Height="860" Width="1340" MinHeight="560" MinWidth="1060"
+        WindowStartupLocation="CenterOwner"
+        Icon="/Assets/app.ico"
+        Background="{DynamicResource AppBgBrush}"
+        FontFamily="{StaticResource UiFont}"
+        Foreground="{DynamicResource TextBrush}"
+        UseLayoutRounding="True"
+        ShowInTaskbar="False">
+
+    <Window.Resources>
+        <Style x:Key="Card" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource CardBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource CardBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="16"/>
+            <Setter Property="Padding" Value="18"/>
+        </Style>
+
+        <Style x:Key="ColumnHeader" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{DynamicResource MutedBrush}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="2,0,8,0"/>
+        </Style>
+
+        <Style x:Key="InfoLabel" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="{DynamicResource SubtleBrush}"/>
+            <Setter Property="Margin" Value="0,0,6,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style x:Key="InfoValue" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Margin" Value="0,0,22,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+            <Setter Property="MaxWidth" Value="260"/>
+            <Setter Property="ToolTip" Value="{Binding Text, RelativeSource={RelativeSource Self}}"/>
+        </Style>
+
+        <!-- 狀態標籤：StateChip 再加一個灰色（未開始、略過） -->
+        <Style x:Key="Chip" TargetType="Border" BasedOn="{StaticResource StateChip}">
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+            <Style.Triggers>
+                <Trigger Property="Tag" Value="Muted">
+                    <Setter Property="Background" Value="{DynamicResource InputBgBrush}"/>
+                    <Setter Property="TextElement.Foreground" Value="{DynamicResource MutedBrush}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- 列尾的小按鈕（上移、下移、刪除…） -->
+        <Style x:Key="RowButton" TargetType="Button" BasedOn="{StaticResource IconButton}">
+            <Setter Property="Width" Value="30"/>
+            <Setter Property="Height" Value="30"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Focusable" Value="False"/>
+        </Style>
+
+        <Style x:Key="RowBox" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+            <Setter Property="Padding" Value="8,6"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Margin" Value="0,0,6,0"/>
+        </Style>
+        <Style x:Key="RowSuggest" TargetType="views:SuggestBox" BasedOn="{StaticResource {x:Type views:SuggestBox}}">
+            <Setter Property="Padding" Value="8,6,34,6"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Margin" Value="0,0,6,0"/>
+        </Style>
+        <Style x:Key="RowDate" TargetType="views:DateBox" BasedOn="{StaticResource {x:Type views:DateBox}}">
+            <Setter Property="Padding" Value="8,6,34,6"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Margin" Value="0,0,6,0"/>
+        </Style>
+
+        <!-- ===== 流程站別的一列。欄寬與上方標題列一致，改欄寬時兩邊都要改 ===== -->
+        <DataTemplate x:Key="StepTemplate">
+            <Border x:Name="Row" CornerRadius="10" Padding="8,5" Margin="0,0,0,4" Background="Transparent">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="32"/>
+                        <ColumnDefinition Width="150"/>
+                        <ColumnDefinition Width="118"/>
+                        <ColumnDefinition Width="128"/>
+                        <ColumnDefinition Width="128"/>
+                        <ColumnDefinition Width="128"/>
+                        <ColumnDefinition Width="104"/>
+                        <ColumnDefinition Width="84"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{Binding Number}" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource MutedBrush}"
+                               VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                    <Grid Grid.Column="1">
+                        <TextBox x:Name="NameBox" Style="{StaticResource RowBox}" Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
+                                 AutomationProperties.Name="站別"/>
+                        <TextBlock x:Name="LinkIcon" Text="&#xE71B;" Style="{StaticResource Icon}" FontSize="12" Visibility="Collapsed"
+                                   HorizontalAlignment="Right" Margin="0,0,14,0" Foreground="{DynamicResource AccentBrush}"
+                                   ToolTip="{Binding LinkToolTip}"/>
+                    </Grid>
+                    <views:SuggestBox Grid.Column="2" Style="{StaticResource RowSuggest}" Tag="People" Loaded="Suggest_Loaded"
+                                      Text="{Binding Owner, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="負責人"/>
+                    <views:DateBox Grid.Column="3" Style="{StaticResource RowDate}" Text="{Binding PlanText, UpdateSourceTrigger=PropertyChanged}"
+                                   AutomationProperties.Name="預計完成"/>
+                    <views:DateBox Grid.Column="4" Style="{StaticResource RowDate}" Text="{Binding StartedText, UpdateSourceTrigger=PropertyChanged}"
+                                   AutomationProperties.Name="實際開始"/>
+                    <views:DateBox Grid.Column="5" Style="{StaticResource RowDate}" Text="{Binding DoneText, UpdateSourceTrigger=PropertyChanged}"
+                                   AutomationProperties.Name="實際完成"/>
+                    <views:SuggestBox Grid.Column="6" Style="{StaticResource RowSuggest}" Tag="People" Loaded="Suggest_Loaded"
+                                      Text="{Binding Signer, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="確認人"/>
+                    <Border Grid.Column="7" Style="{StaticResource Chip}" Tag="{Binding StateTag}">
+                        <TextBlock Text="{Binding StateText}"/>
+                    </Border>
+                    <TextBox Grid.Column="8" Style="{StaticResource RowBox}" Text="{Binding Note, UpdateSourceTrigger=PropertyChanged}"
+                             AutomationProperties.Name="備註"/>
+                    <StackPanel Grid.Column="9" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button Style="{StaticResource RowButton}" Content="&#xE73E;" Click="StepDone_Click"
+                                ToolTip="這站今天完成（填入實際完成日期）" AutomationProperties.Name="完成"/>
+                        <ToggleButton x:Name="SkipToggle" IsChecked="{Binding Skipped}" Focusable="False" Cursor="Hand"
+                                      ToolTip="這張工令不用做這站（略過）" AutomationProperties.Name="略過">
+                            <ToggleButton.Template>
+                                <ControlTemplate TargetType="ToggleButton">
+                                    <Border x:Name="Bd" Width="30" Height="30" CornerRadius="8" Background="Transparent">
+                                        <TextBlock x:Name="Glyph" Text="&#xE8D8;" Style="{StaticResource Icon}" FontSize="12"
+                                                   Foreground="{DynamicResource SubtleBrush}" HorizontalAlignment="Center"/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource HoverBrush}"/>
+                                        </Trigger>
+                                        <Trigger Property="IsChecked" Value="True">
+                                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AccentSoftBrush}"/>
+                                            <Setter TargetName="Glyph" Property="Foreground" Value="{DynamicResource AccentBrush}"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </ToggleButton.Template>
+                        </ToggleButton>
+                        <Button Style="{StaticResource RowButton}" Content="&#xE74A;" Click="StepUp_Click" ToolTip="往上移" AutomationProperties.Name="往上移"/>
+                        <Button Style="{StaticResource RowButton}" Content="&#xE74B;" Click="StepDown_Click" ToolTip="往下移" AutomationProperties.Name="往下移"/>
+                        <Button x:Name="DeleteButton" Style="{StaticResource RowButton}" Content="&#xE74D;" Click="StepDelete_Click"
+                                ToolTip="刪除這站" AutomationProperties.Name="刪除"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsLinked}" Value="True">
+                    <Setter TargetName="LinkIcon" Property="Visibility" Value="Visible"/>
+                    <Setter TargetName="NameBox" Property="Padding" Value="8,6,30,6"/>
+                    <Setter TargetName="DeleteButton" Property="IsEnabled" Value="False"/>
+                    <Setter TargetName="DeleteButton" Property="Opacity" Value="0.3"/>
+                    <Setter TargetName="DeleteButton" Property="ToolTip" Value="和工令日期連動的站別不能刪除，不需要時可以按「略過」"/>
+                    <Setter TargetName="DeleteButton" Property="ToolTipService.ShowOnDisabled" Value="True"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Skipped}" Value="True">
+                    <Setter TargetName="Row" Property="Opacity" Value="0.55"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding StateTag}" Value="Overdue">
+                    <Setter TargetName="Row" Property="Background" Value="{DynamicResource DangerSoftBrush}"/>
+                </DataTrigger>
+                <Trigger SourceName="Row" Property="IsMouseOver" Value="True">
+                    <Setter TargetName="Row" Property="Background" Value="{DynamicResource HoverBrush}"/>
+                </Trigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
+        <!-- ===== 品管檢驗的一列 ===== -->
+        <DataTemplate x:Key="CheckTemplate">
+            <Border x:Name="Row" CornerRadius="10" Padding="8,5" Margin="0,0,0,4" Background="Transparent">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="32"/>
+                        <ColumnDefinition Width="150"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="120"/>
+                        <ColumnDefinition Width="112"/>
+                        <ColumnDefinition Width="112"/>
+                        <ColumnDefinition Width="128"/>
+                        <ColumnDefinition Width="170"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{Binding Number}" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource MutedBrush}"
+                               VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                    <TextBox Grid.Column="1" Style="{StaticResource RowBox}" Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
+                             AutomationProperties.Name="項目"/>
+                    <TextBox Grid.Column="2" Style="{StaticResource RowBox}" Text="{Binding Standard, UpdateSourceTrigger=PropertyChanged}"
+                             AutomationProperties.Name="標準"/>
+                    <TextBox Grid.Column="3" Style="{StaticResource RowBox}" Text="{Binding Measured, UpdateSourceTrigger=PropertyChanged}"
+                             AutomationProperties.Name="量測值"/>
+                    <ComboBox Grid.Column="4" SelectedIndex="{Binding ResultIndex}" Margin="0,0,6,0" AutomationProperties.Name="結果">
+                        <ComboBoxItem Content="未檢"/>
+                        <ComboBoxItem Content="合格"/>
+                        <ComboBoxItem Content="不合格"/>
+                        <ComboBoxItem Content="不適用"/>
+                    </ComboBox>
+                    <views:SuggestBox Grid.Column="5" Style="{StaticResource RowSuggest}" Tag="People" Loaded="Suggest_Loaded"
+                                      Text="{Binding Inspector, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="檢驗員"/>
+                    <views:DateBox Grid.Column="6" Style="{StaticResource RowDate}" Text="{Binding DateText, UpdateSourceTrigger=PropertyChanged}"
+                                   AutomationProperties.Name="日期"/>
+                    <TextBox Grid.Column="7" Style="{StaticResource RowBox}" Text="{Binding Note, UpdateSourceTrigger=PropertyChanged}"
+                             AutomationProperties.Name="備註"/>
+                    <Button Grid.Column="8" Style="{StaticResource RowButton}" Content="&#xE74D;" Click="CheckDelete_Click"
+                            ToolTip="刪除這個項目" AutomationProperties.Name="刪除"/>
+                </Grid>
+            </Border>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsFail}" Value="True">
+                    <Setter TargetName="Row" Property="Background" Value="{DynamicResource DangerSoftBrush}"/>
+                </DataTrigger>
+                <Trigger SourceName="Row" Property="IsMouseOver" Value="True">
+                    <Setter TargetName="Row" Property="Background" Value="{DynamicResource HoverBrush}"/>
+                </Trigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
+        <!-- ===== 異常 / 變更紀錄的一列 ===== -->
+        <DataTemplate x:Key="IssueTemplate">
+            <Border x:Name="Row" CornerRadius="10" Padding="8,5" Margin="0,0,0,4" Background="Transparent">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="128"/>
+                        <ColumnDefinition Width="118"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="112"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="128"/>
+                        <ColumnDefinition Width="76"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <views:DateBox Style="{StaticResource RowDate}" Text="{Binding DateText, UpdateSourceTrigger=PropertyChanged}"
+                                   AutomationProperties.Name="日期"/>
+                    <views:SuggestBox Grid.Column="1" Style="{StaticResource RowSuggest}" Tag="IssueType" Loaded="Suggest_Loaded"
+                                      Text="{Binding Type, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="類別"/>
+                    <TextBox Grid.Column="2" Style="{StaticResource RowBox}" Text="{Binding Description, UpdateSourceTrigger=PropertyChanged}"
+                             AutomationProperties.Name="說明"/>
+                    <views:SuggestBox Grid.Column="3" Style="{StaticResource RowSuggest}" Tag="People" Loaded="Suggest_Loaded"
+                                      Text="{Binding Owner, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="負責人"/>
+                    <TextBox Grid.Column="4" Style="{StaticResource RowBox}" Text="{Binding Action, UpdateSourceTrigger=PropertyChanged}"
+                             AutomationProperties.Name="處理對策"/>
+                    <views:DateBox Grid.Column="5" Style="{StaticResource RowDate}" Text="{Binding ClosedText, UpdateSourceTrigger=PropertyChanged}"
+                                   AutomationProperties.Name="結案日期"/>
+                    <Border Grid.Column="6" Style="{StaticResource Chip}" Tag="{Binding StateTag}">
+                        <TextBlock Text="{Binding StateText}"/>
+                    </Border>
+                    <StackPanel Grid.Column="7" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button Style="{StaticResource RowButton}" Content="&#xE73E;" Click="IssueClose_Click"
+                                ToolTip="今天結案（填入結案日期）" AutomationProperties.Name="結案"/>
+                        <Button Style="{StaticResource RowButton}" Content="&#xE74D;" Click="IssueDelete_Click"
+                                ToolTip="刪除這筆紀錄" AutomationProperties.Name="刪除"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+            <DataTemplate.Triggers>
+                <Trigger SourceName="Row" Property="IsMouseOver" Value="True">
+                    <Setter TargetName="Row" Property="Background" Value="{DynamicResource HoverBrush}"/>
+                </Trigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+    </Window.Resources>
+
+    <Grid Margin="24,18,24,16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- ===== 工令資料 ===== -->
+        <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="流程卡" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource AccentTextBrush}"
+                                   VerticalAlignment="Center" Margin="0,0,10,0"/>
+                        <TextBlock x:Name="WorkOrderText" FontFamily="{StaticResource DisplayFont}" FontSize="24" FontWeight="SemiBold"
+                                   VerticalAlignment="Center"/>
+                        <Border x:Name="PriorityBadge" CornerRadius="8" Padding="8,2" Margin="12,0,0,0" VerticalAlignment="Center"
+                                Background="{DynamicResource DangerSoftBrush}" Visibility="Collapsed">
+                            <TextBlock x:Name="PriorityText" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource DangerBrush}"/>
+                        </Border>
+                        <Border x:Name="CertBadge" CornerRadius="8" Padding="8,2" Margin="8,0,0,0" VerticalAlignment="Center"
+                                Background="{DynamicResource AccentSoftBrush}" Visibility="Collapsed">
+                            <TextBlock x:Name="CertText" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource AccentTextBrush}"/>
+                        </Border>
+                    </StackPanel>
+                    <TextBlock x:Name="SubtitleText" FontSize="14" Foreground="{DynamicResource MutedBrush}" Margin="0,4,0,10"
+                               TextTrimming="CharacterEllipsis"/>
+                    <WrapPanel x:Name="InfoPanel"/>
+                </StackPanel>
+
+                <!-- 進度與暫停 -->
+                <StackPanel Grid.Column="1" Width="340" Margin="24,0,0,0">
+                    <DockPanel>
+                        <TextBlock x:Name="ProgressCount" DockPanel.Dock="Right" FontSize="13" FontWeight="SemiBold"/>
+                        <TextBlock Text="進度" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource MutedBrush}"/>
+                    </DockPanel>
+                    <Grid Height="8" Margin="0,8,0,6">
+                        <Border CornerRadius="4" Background="{DynamicResource HoverBrush}"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition x:Name="ProgressFill" Width="0*"/>
+                                <ColumnDefinition x:Name="ProgressRest" Width="1*"/>
+                            </Grid.ColumnDefinitions>
+                            <Border CornerRadius="4" Background="{DynamicResource SuccessBrush}"/>
+                        </Grid>
+                    </Grid>
+                    <TextBlock x:Name="CurrentStepText" FontSize="13" Foreground="{DynamicResource MutedBrush}" Margin="0,0,0,12"/>
+                    <CheckBox x:Name="HoldBox" Content="暫停這張工令" Checked="Hold_Changed" Unchecked="Hold_Changed"/>
+                    <Grid Margin="0,8,0,0">
+                        <TextBox x:Name="HoldReasonBox" Padding="10,7" FontSize="13" IsEnabled="False"
+                                 ToolTip="暫停原因，例如：等客戶確認圖面、缺料" TextChanged="Field_Changed"
+                                 AutomationProperties.Name="暫停原因"/>
+                        <TextBlock Text="暫停原因，例如：等客戶確認圖面" FontSize="13" Margin="12,0,0,0" VerticalAlignment="Center"
+                                   Foreground="{DynamicResource SubtleBrush}" IsHitTestVisible="False">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Text, ElementName=HoldReasonBox}" Value="">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </Grid>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ===== 分頁 ===== -->
+        <DockPanel Grid.Row="1" Margin="0,0,0,12">
+            <TextBlock x:Name="TabHint" DockPanel.Dock="Right" FontSize="12" Foreground="{DynamicResource SubtleBrush}"
+                       VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="560" TextAlignment="Right"/>
+            <Border Style="{StaticResource SegmentBar}" HorizontalAlignment="Left">
+                <StackPanel Orientation="Horizontal">
+                    <RadioButton x:Name="TabSteps" Style="{StaticResource SegmentTab}" GroupName="RunTab" IsChecked="True" Checked="Tab_Checked" AutomationProperties.Name="流程站別">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE8FD;" Style="{StaticResource Icon}" FontSize="13" Margin="0,0,7,0"/>
+                            <TextBlock x:Name="TabStepsText" Text="流程站別"/>
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton x:Name="TabChecks" Style="{StaticResource SegmentTab}" GroupName="RunTab" Checked="Tab_Checked" AutomationProperties.Name="品管檢驗">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE9D5;" Style="{StaticResource Icon}" FontSize="13" Margin="0,0,7,0"/>
+                            <TextBlock x:Name="TabChecksText" Text="品管檢驗"/>
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton x:Name="TabIssues" Style="{StaticResource SegmentTab}" GroupName="RunTab" Checked="Tab_Checked" AutomationProperties.Name="異常 / 變更">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE7BA;" Style="{StaticResource Icon}" FontSize="13" Margin="0,0,7,0"/>
+                            <TextBlock x:Name="TabIssuesText" Text="異常 / 變更"/>
+                        </StackPanel>
+                    </RadioButton>
+                </StackPanel>
+            </Border>
+        </DockPanel>
+
+        <!-- ===== 內容 ===== -->
+        <Border Grid.Row="2" Style="{StaticResource Card}" Padding="14,14,14,12">
+            <Grid>
+                <!-- 流程站別 -->
+                <Grid x:Name="StepsPanel">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <Border Background="{DynamicResource InputBgBrush}" CornerRadius="10" Padding="8,8" Margin="0,0,14,6">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="32"/>
+                                <ColumnDefinition Width="150"/>
+                                <ColumnDefinition Width="118"/>
+                                <ColumnDefinition Width="128"/>
+                                <ColumnDefinition Width="128"/>
+                                <ColumnDefinition Width="128"/>
+                                <ColumnDefinition Width="104"/>
+                                <ColumnDefinition Width="84"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="150"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="序" Style="{StaticResource ColumnHeader}" HorizontalAlignment="Center"/>
+                            <TextBlock Grid.Column="1" Text="站別" Style="{StaticResource ColumnHeader}"/>
+                            <TextBlock Grid.Column="2" Text="負責人" Style="{StaticResource ColumnHeader}"/>
+                            <TextBlock Grid.Column="3" Text="預計完成" Style="{StaticResource ColumnHeader}"/>
+                            <TextBlock Grid.Column="4" Text="實際開始" Style="{StaticResource ColumnHeader}"/>
+                            <TextBlock Grid.Column="5" Text="實際完成" Style="{StaticResource ColumnHeader}"/>
+                            <TextBlock Grid.Column="6" Text="確認人" Style="{StaticResource ColumnHeader}"/>
+                            <TextBlock Grid.Column="7" Text="狀態" Style="{StaticResource ColumnHeader}"/>
+                            <TextBlock Grid.Column="8" Text="備註" Style="{StaticResource ColumnHeader}"/>
+                        </Grid>
+                    </Border>
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                        <ItemsControl x:Name="StepList" ItemTemplate="{StaticResource StepTemplate}" Margin="0,0,8,0"/>
+                    </ScrollViewer>
+                    <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,10,0,0">
+                        <Button Style="{StaticResource GhostButton}" Click="AddStep_Click" AutomationProperties.Name="新增站別">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE710;" Style="{StaticResource Icon}" FontSize="12" Margin="0,0,8,0"/>
+                                <TextBlock Text="新增站別"/>
+                            </StackPanel>
+                        </Button>
+                        <TextBlock Text="&#xE71B;" Style="{StaticResource Icon}" FontSize="12" Foreground="{DynamicResource AccentBrush}"
+                                   Margin="14,0,6,0"/>
+                        <TextBlock Text="這個圖示的站別和工令上的日期連動。按 ✓ 填入今天完成；不用做的站按列尾的「略過」按鈕。"
+                                   FontSize="12" Foreground="{DynamicResource SubtleBrush}" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Grid>
+
+                <!-- 品管檢驗 -->
+                <Grid x:Name="ChecksPanel" Visibility="Collapsed">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <Border Background="{DynamicResource InputBgBrush}" CornerRadius="10" Padding="8,8" Margin="0,0,14,6">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="32"/>
+                                <ColumnDefinition Width="150"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="120"/>
+                                <ColumnDefinition Width="112"/>
+                                <ColumnDefinition Width="112"/>
+                                <ColumnDefinition Width="128"/>
+                                <ColumnDefinition Width="170"/>
+                                <ColumnDefinition Width="30"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="序" Style="{StaticResource ColumnHeader}" HorizontalAlignment="Center"/>
+                            <TextBlock Grid.Column="1" Text="檢驗項目" Style="{StaticResource ColumnHeader}"/>
+                            <TextBlock Grid.Column="2" Text="標準 / 規格" Style="{StaticResource ColumnHeader}"/>
+                            <TextBlock Grid.Column="3" Text="量測值" Style="{StaticResource ColumnHeader}"/>
+                            <TextBlock Grid.Column="4" Text="結果" Style="{StaticResource ColumnHeader}"/>
+                            <TextBlock Grid.Column="5" Text="檢驗員" Style="{StaticResource ColumnHeader}"/>
+                            <TextBlock Grid.Column="6" Text="日期" Style="{StaticResource ColumnHeader}"/>
+                            <TextBlock Grid.Column="7" Text="備註" Style="{StaticResource ColumnHeader}"/>
+                        </Grid>
+                    </Border>
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                        <ItemsControl x:Name="CheckList" ItemTemplate="{StaticResource CheckTemplate}" Margin="0,0,8,0"/>
+                    </ScrollViewer>
+                    <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,10,0,0">
+                        <Button Style="{StaticResource GhostButton}" Click="AddCheck_Click" AutomationProperties.Name="新增項目">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE710;" Style="{StaticResource Icon}" FontSize="12" Margin="0,0,8,0"/>
+                                <TextBlock Text="新增項目"/>
+                            </StackPanel>
+                        </Button>
+                        <Button Style="{StaticResource GhostButton}" Click="PassAll_Click" Margin="6,0,0,0" AutomationProperties.Name="未檢的全部合格"
+                                ToolTip="還沒檢驗的項目全部設為合格，日期填今天">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE73E;" Style="{StaticResource Icon}" FontSize="12" Margin="0,0,8,0"/>
+                                <TextBlock Text="未檢的全部合格"/>
+                            </StackPanel>
+                        </Button>
+                        <TextBlock x:Name="InspectorHint" Text="檢驗員：" FontSize="12" Foreground="{DynamicResource MutedBrush}"
+                                   VerticalAlignment="Center" Margin="14,0,6,0"/>
+                        <views:SuggestBox x:Name="DefaultInspectorBox" Width="140" Padding="8,6,34,6" FontSize="13" Tag="People"
+                                          Loaded="Suggest_Loaded" ToolTip="按「未檢的全部合格」時填入的檢驗員"
+                                          AutomationProperties.Name="預設檢驗員"/>
+                    </StackPanel>
+                </Grid>
+
+                <!-- 異常 / 變更 -->
+                <Grid x:Name="IssuesPanel" Visibility="Collapsed">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <Border Background="{DynamicResource InputBgBrush}" CornerRadius="10" Padding="8,8" Margin="0,0,14,6">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="128"/>
+                                <ColumnDefinition Width="118"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="112"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="128"/>
+                                <ColumnDefinition Width="76"/>
+                                <ColumnDefinition Width="60"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="日期" Style="{StaticResource ColumnHeader}"/>
+                            <TextBlock Grid.Column="1" Text="類別" Style="{StaticResource ColumnHeader}"/>
+                            <TextBlock Grid.Column="2" Text="說明" Style="{StaticResource ColumnHeader}"/>
+                            <TextBlock Grid.Column="3" Text="負責人" Style="{StaticResource ColumnHeader}"/>
+                            <TextBlock Grid.Column="4" Text="處理對策" Style="{StaticResource ColumnHeader}"/>
+                            <TextBlock Grid.Column="5" Text="結案日期" Style="{StaticResource ColumnHeader}"/>
+                            <TextBlock Grid.Column="6" Text="狀態" Style="{StaticResource ColumnHeader}"/>
+                        </Grid>
+                    </Border>
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                        <ItemsControl x:Name="IssueList" ItemTemplate="{StaticResource IssueTemplate}" Margin="0,0,8,0"/>
+                    </ScrollViewer>
+                    <TextBlock x:Name="IssueEmpty" Grid.Row="1" Text="還沒有異常或變更紀錄。缺料、設計變更、客戶變更、品質異常都可以記在這裡。"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource MutedBrush}"
+                               IsHitTestVisible="False"/>
+                    <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,10,0,0">
+                        <Button Style="{StaticResource GhostButton}" Click="AddIssue_Click" AutomationProperties.Name="新增紀錄">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE710;" Style="{StaticResource Icon}" FontSize="12" Margin="0,0,8,0"/>
+                                <TextBlock Text="新增紀錄"/>
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Grid>
+        </Border>
+
+        <!-- ===== 底部按鈕 ===== -->
+        <DockPanel Grid.Row="3" Margin="0,14,0,0">
+            <Button DockPanel.Dock="Left" Click="Print_Click" Padding="16,10" AutomationProperties.Name="列印流程卡">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="&#xE749;" Style="{StaticResource Icon}" FontSize="13" Margin="0,0,8,0"/>
+                    <TextBlock Text="列印流程卡"/>
+                </StackPanel>
+            </Button>
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                <Button Click="Cancel_Click" Padding="22,10" Margin="0,0,10,0">
+                    <TextBlock Text="取消"/>
+                </Button>
+                <Button Style="{StaticResource PrimaryButton}" Click="Save_Click" Padding="22,10" AutomationProperties.Name="儲存">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#xE74E;" Style="{StaticResource Icon}" FontSize="13" Margin="0,0,8,0"/>
+                        <TextBlock Text="儲存"/>
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+            <TextBlock x:Name="StatusText" FontSize="12" Foreground="{DynamicResource MutedBrush}" VerticalAlignment="Center" Margin="14,0"/>
+        </DockPanel>
+    </Grid>
+</Window>

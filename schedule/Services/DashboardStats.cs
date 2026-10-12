@@ -36,6 +36,8 @@ namespace schedule.Services
         public int DeliveryOverdue { get; private init; }  // 預計交期已過、還沒交貨
         public List<CountItem> Workload { get; private init; } = new();
         public List<CountItem> Customers { get; private init; } = new();
+        public List<CountItem> Stations { get; private init; } = new();   // 各站別在製（未交貨工令目前做到哪一站）
+        public List<Job> Attention { get; private init; } = new();        // 暫停、異常未結案、檢驗不合格
 
         public static DashboardStats Compute(IReadOnlyCollection<Job> jobs, DateTime today)
         {
@@ -75,6 +77,11 @@ namespace schedule.Services
                 DeliveryOverdue = active.Count(j => j.DeliveryPlan is { } p && p.Date < today),
                 Workload = Count(active.SelectMany(j => People(j.InnerWiring).Concat(People(j.OuterWiring)).Distinct(StringComparer.CurrentCultureIgnoreCase))),
                 Customers = Count(active.Select(j => j.Customer.Trim()).Where(c => c.Length > 0)),
+                Stations = RunCardRules.WorkInProcess(active),
+                Attention = active.Where(RunCardRules.NeedsAttention)
+                    .OrderBy(j => !RunCardRules.IsOnHold(j))
+                    .ThenBy(j => j.DeliveryPlan == null).ThenBy(j => j.DeliveryPlan)
+                    .ToList(),
             };
         }
 

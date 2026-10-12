@@ -17,10 +17,10 @@ namespace schedule.Services
     public enum JobStatus { Active, Overdue, Done }
 
     /// <summary>上方的篩選卡片。</summary>
-    public enum JobFilter { All, Active, Overdue, DueSoon, Done }
+    public enum JobFilter { All, Active, Overdue, DueSoon, Done, Attention }
 
     /// <summary>清單排序方式。</summary>
-    public enum JobSort { DeliveryPlan, MaterialPlan, WiringPlan, DispatchPlan, WorkOrder, Customer }
+    public enum JobSort { DeliveryPlan, MaterialPlan, WiringPlan, DispatchPlan, WorkOrder, Customer, Priority }
 
     /// <summary>排程的判斷規則（狀態、篩選、排序），不依賴畫面，方便自動測試。</summary>
     public static class ScheduleRules
@@ -89,15 +89,18 @@ namespace schedule.Services
             JobFilter.Overdue => Status(job, today) == JobStatus.Overdue,
             JobFilter.DueSoon => IsDueSoon(job, today),
             JobFilter.Done => Status(job, today) == JobStatus.Done,
+            JobFilter.Attention => RunCardRules.NeedsAttention(job),
             _ => true,
         };
 
-        /// <summary>搜尋：工令、機種、客戶、人員、耗材、備註任一包含關鍵字（不分大小寫）。</summary>
+        /// <summary>搜尋：工令、機種、客戶、人員、耗材、備註、案名、訂單、圖號、業務、暫停原因、異常紀錄任一包含關鍵字（不分大小寫）。</summary>
         public static bool MatchesSearch(Job job, string keyword)
         {
             keyword = keyword.Trim();
             if (keyword.Length == 0) return true;
-            return new[] { job.WorkOrder, job.Model, job.Customer, job.InnerWiring, job.OuterWiring, job.Consumables, job.Note }
+            return new[] { job.WorkOrder, job.Model, job.Customer, job.InnerWiring, job.OuterWiring, job.Consumables, job.Note,
+                    job.ProjectName, job.OrderNo, job.DrawingNo, job.Sales, job.HoldReason }
+                .Concat((job.Issues ?? new()).SelectMany(i => new[] { i.Type, i.Description, i.Action }))
                 .Any(s => s.Contains(keyword, StringComparison.OrdinalIgnoreCase));
         }
 
@@ -114,6 +117,9 @@ namespace schedule.Services
                 JobSort.DispatchPlan => ByDate(j => j.DispatchPlan),
                 JobSort.WorkOrder => jobs.OrderBy(j => j.WorkOrder, NaturalComparer.Instance),
                 JobSort.Customer => jobs.OrderBy(j => j.Customer.Length == 0).ThenBy(j => j.Customer, StringComparer.CurrentCultureIgnoreCase),
+                // 急件在前（已交貨的排最後），同等級再依預計交期
+                JobSort.Priority => jobs.OrderBy(j => j.DeliveryActual != null).ThenByDescending(j => j.Priority)
+                    .ThenBy(j => j.DeliveryPlan == null).ThenBy(j => j.DeliveryPlan),
                 _ => ByDate(j => j.DeliveryPlan),
             };
             return ordered.ThenBy(j => j.WorkOrder, NaturalComparer.Instance);
@@ -127,8 +133,9 @@ namespace schedule.Services
         /// <summary>
         /// 把匯入的工令併進 existing。replace = true 時先清空，完全以匯入為準；
         /// 否則工令相同的以匯入內容取代（保留原本的 Id），其他新增。
+        /// keep(原本, 匯入) 可以把匯入檔沒有的資料（例如舊版 Excel 沒有流程卡）從原本那筆搬過去。
         /// </summary>
-        public static (int Added, int Updated) Merge(List<Job> existing, IEnumerable<Job> imported, bool replace)
+        public static (int Added, int Updated) Merge(List<Job> existing, IEnumerable<Job> imported, bool replace, Action<Job, Job>? keep = null)
         {
             if (replace) existing.Clear();
             int added = 0, updated = 0;
@@ -142,6 +149,7 @@ namespace schedule.Services
                     continue;
                 }
                 item.Id = same.Id;
+                keep?.Invoke(same, item);
                 existing[existing.IndexOf(same)] = item;
                 updated++;
             }

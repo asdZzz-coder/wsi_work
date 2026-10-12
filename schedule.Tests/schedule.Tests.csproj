@@ -33,6 +33,10 @@
     <Compile Include="..\schedule\Services\GanttMath.cs" Link="Source\GanttMath.cs" />
     <Compile Include="..\schedule\Services\DashboardStats.cs" Link="Source\DashboardStats.cs" />
     <Compile Include="..\schedule\Services\InputHistory.cs" Link="Source\InputHistory.cs" />
+    <Compile Include="..\schedule\Models\RunCard.cs" Link="Source\RunCard.cs" />
+    <Compile Include="..\schedule\Services\RunCardRules.cs" Link="Source\RunCardRules.cs" />
+    <Compile Include="..\schedule\Services\Code39.cs" Link="Source\Code39.cs" />
+    <Compile Include="..\schedule\Views\RunCardPrinter.cs" Link="Source\RunCardPrinter.cs" />
   </ItemGroup>
 
   <ItemGroup>

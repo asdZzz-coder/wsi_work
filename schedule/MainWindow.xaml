@@ -121,24 +121,28 @@
         <DataTemplate x:Key="JobTemplate">
             <Grid>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="112"/>
-                    <ColumnDefinition Width="104"/>
-                    <ColumnDefinition Width="52"/>
+                    <ColumnDefinition Width="128"/>
                     <ColumnDefinition Width="96"/>
+                    <ColumnDefinition Width="52"/>
+                    <ColumnDefinition Width="88"/>
                     <ColumnDefinition Width="72"/>
                     <ColumnDefinition Width="76"/>
                     <ColumnDefinition Width="76"/>
                     <ColumnDefinition Width="76"/>
                     <ColumnDefinition Width="76"/>
-                    <ColumnDefinition Width="72"/>
-                    <ColumnDefinition Width="72"/>
-                    <ColumnDefinition Width="72"/>
-                    <ColumnDefinition Width="72"/>
+                    <ColumnDefinition Width="68"/>
+                    <ColumnDefinition Width="68"/>
+                    <ColumnDefinition Width="68"/>
+                    <ColumnDefinition Width="112"/>
                 </Grid.ColumnDefinitions>
 
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,8,0">
-                    <TextBlock Text="{Binding WorkOrder}" FontSize="13" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
-                               MaxWidth="84" ToolTip="{Binding WorkOrder}"/>
+                    <Border x:Name="Urgent" CornerRadius="5" Padding="4,0,4,1" Margin="0,0,5,0" VerticalAlignment="Center"
+                            Background="{DynamicResource DangerSoftBrush}" Visibility="Collapsed" ToolTip="{Binding PriorityText}">
+                        <TextBlock x:Name="UrgentText" Text="急" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource DangerBrush}"/>
+                    </Border>
+                    <TextBlock x:Name="WorkOrderText" Text="{Binding WorkOrder}" FontSize="13" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
+                               MaxWidth="100" ToolTip="{Binding WorkOrder}"/>
                     <TextBlock x:Name="NoteIcon" Text="&#xE70B;" Style="{StaticResource Icon}" FontSize="12" Margin="6,1,0,0"
                                Foreground="{DynamicResource SubtleBrush}" ToolTip="{Binding Note}" Visibility="Collapsed"/>
                 </StackPanel>
@@ -161,11 +165,20 @@
                 <TextBlock Grid.Column="9" Text="{Binding InnerWiring}" Style="{StaticResource CellText}"/>
                 <TextBlock Grid.Column="10" Text="{Binding OuterWiring}" Style="{StaticResource CellText}"/>
                 <TextBlock Grid.Column="11" Text="{Binding Consumables}" Style="{StaticResource CellText}"/>
-                <Border x:Name="Pill" Grid.Column="12" CornerRadius="9" Padding="9,3" HorizontalAlignment="Left" VerticalAlignment="Center"
-                        Background="{DynamicResource AccentSoftBrush}">
-                    <TextBlock x:Name="PillText" Text="{Binding StatusText}" FontSize="12" FontWeight="SemiBold"
-                               Foreground="{DynamicResource AccentTextBrush}"/>
-                </Border>
+                <!-- 狀態 + 目前站別與進度（流程卡） -->
+                <StackPanel Grid.Column="12" VerticalAlignment="Center" Background="Transparent" ToolTip="{Binding StatusToolTip}">
+                    <StackPanel Orientation="Horizontal">
+                        <Border x:Name="Pill" CornerRadius="9" Padding="9,2" HorizontalAlignment="Left" VerticalAlignment="Center"
+                                Background="{DynamicResource AccentSoftBrush}">
+                            <TextBlock x:Name="PillText" Text="{Binding StatusText}" FontSize="12" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource AccentTextBrush}"/>
+                        </Border>
+                        <TextBlock x:Name="AttentionIcon" Text="&#xE7BA;" Style="{StaticResource Icon}" FontSize="12" Margin="6,0,0,0"
+                                   Foreground="{DynamicResource WarningBrush}" Visibility="Collapsed"/>
+                    </StackPanel>
+                    <TextBlock Text="{Binding ProgressText}" FontSize="11.5" Foreground="{DynamicResource MutedBrush}" Margin="1,3,0,0"
+                               TextTrimming="CharacterEllipsis"/>
+                </StackPanel>
             </Grid>
             <DataTemplate.Triggers>
                 <DataTrigger Binding="{Binding HasNote}" Value="True">
@@ -187,6 +200,24 @@
                 <DataTrigger Binding="{Binding Status}" Value="Done">
                     <Setter TargetName="Pill" Property="Background" Value="{DynamicResource SuccessSoftBrush}"/>
                     <Setter TargetName="PillText" Property="Foreground" Value="{DynamicResource SuccessBrush}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding OnHold}" Value="True">
+                    <Setter TargetName="Pill" Property="Background" Value="{DynamicResource WarningSoftBrush}"/>
+                    <Setter TargetName="PillText" Property="Foreground" Value="{DynamicResource WarningBrush}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding NeedsAttention}" Value="True">
+                    <Setter TargetName="AttentionIcon" Property="Visibility" Value="Visible"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Priority}" Value="Urgent">
+                    <Setter TargetName="Urgent" Property="Visibility" Value="Visible"/>
+                    <Setter TargetName="WorkOrderText" Property="MaxWidth" Value="78"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Priority}" Value="Rush">
+                    <Setter TargetName="Urgent" Property="Visibility" Value="Visible"/>
+                    <Setter TargetName="Urgent" Property="Background" Value="{DynamicResource DangerBrush}"/>
+                    <Setter TargetName="UrgentText" Property="Text" Value="特急"/>
+                    <Setter TargetName="UrgentText" Property="Foreground" Value="White"/>
+                    <Setter TargetName="WorkOrderText" Property="MaxWidth" Value="66"/>
                 </DataTrigger>
             </DataTemplate.Triggers>
         </DataTemplate>
@@ -337,6 +368,13 @@
                                 <TextBlock x:Name="DoneCount" Text="0" Style="{StaticResource FilterCount}" Foreground="{DynamicResource SuccessBrush}"/>
                             </StackPanel>
                         </RadioButton>
+                        <RadioButton Style="{StaticResource FilterCard}" GroupName="Filter" Tag="Attention" Checked="Filter_Checked"
+                                     ToolTip="暫停中、有異常還沒結案、或品管檢驗不合格（在流程卡裡填）">
+                            <StackPanel>
+                                <TextBlock Text="暫停 / 異常" Style="{StaticResource FilterLabel}"/>
+                                <TextBlock x:Name="AttentionCount" Text="0" Style="{StaticResource FilterCount}" Foreground="{DynamicResource WarningBrush}"/>
+                            </StackPanel>
+                        </RadioButton>
                     </WrapPanel>
 
                     <!-- 搜尋 + 排序 -->
@@ -349,12 +387,13 @@
                             <ComboBoxItem Content="依預計出料日期" Tag="DispatchPlan"/>
                             <ComboBoxItem Content="依工令" Tag="WorkOrder"/>
                             <ComboBoxItem Content="依客戶" Tag="Customer"/>
+                            <ComboBoxItem Content="依優先（急件在前）" Tag="Priority"/>
                         </ComboBox>
                         <Grid>
                             <TextBox x:Name="SearchBox" Padding="38,9,12,9" TextChanged="SearchBox_TextChanged"/>
                             <TextBlock Text="&#xE721;" Style="{StaticResource Icon}" Foreground="{DynamicResource SubtleBrush}"
                                        Margin="14,0,0,0" IsHitTestVisible="False"/>
-                            <TextBlock Text="搜尋工令、機種、客戶、人員、備註…" Margin="40,0,0,0">
+                            <TextBlock Text="搜尋工令、機種、客戶、人員、案名、訂單、圖號、備註…" Margin="40,0,0,0">
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock" BasedOn="{StaticResource Placeholder}">
                                         <Setter Property="Visibility" Value="Collapsed"/>
@@ -391,19 +430,19 @@
                             <Border Grid.Row="0" Background="{DynamicResource InputBgBrush}" CornerRadius="10" Padding="12,9" Margin="0,0,4,6">
                                 <Grid x:Name="HeaderGrid">
                                     <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="112"/>
-                                        <ColumnDefinition Width="104"/>
-                                        <ColumnDefinition Width="52"/>
+                                        <ColumnDefinition Width="128"/>
                                         <ColumnDefinition Width="96"/>
+                                        <ColumnDefinition Width="52"/>
+                                        <ColumnDefinition Width="88"/>
                                         <ColumnDefinition Width="72"/>
                                         <ColumnDefinition Width="76"/>
                                         <ColumnDefinition Width="76"/>
                                         <ColumnDefinition Width="76"/>
                                         <ColumnDefinition Width="76"/>
-                                        <ColumnDefinition Width="72"/>
-                                        <ColumnDefinition Width="72"/>
-                                        <ColumnDefinition Width="72"/>
-                                        <ColumnDefinition Width="72"/>
+                                        <ColumnDefinition Width="68"/>
+                                        <ColumnDefinition Width="68"/>
+                                        <ColumnDefinition Width="68"/>
+                                        <ColumnDefinition Width="112"/>
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Grid.Column="0" Text="工令" Style="{StaticResource ColumnHeader}"/>
                                     <TextBlock Grid.Column="1" Text="機種" Style="{StaticResource ColumnHeader}"/>
@@ -423,7 +462,7 @@
 
                             <ListBox x:Name="JobList" Grid.Row="1" Style="{StaticResource EntryListStyle}"
                                      ItemTemplate="{StaticResource JobTemplate}" SelectionMode="Single"
-                                     SelectionChanged="JobList_SelectionChanged"/>
+                                     SelectionChanged="JobList_SelectionChanged" MouseDoubleClick="JobList_MouseDoubleClick"/>
 
                             <!-- 空清單提示 -->
                             <StackPanel Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False">
@@ -516,6 +555,45 @@
                                 </StackPanel>
                             </Grid>
 
+                            <TextBlock Text="案名 / 工程名稱" Style="{StaticResource FieldLabel}"/>
+                            <TextBox x:Name="ProjectBox" Margin="0,0,0,14"/>
+
+                            <Grid Margin="0,0,0,14">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="12"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Text="訂單號碼" Style="{StaticResource FieldLabel}"/>
+                                    <TextBox x:Name="OrderNoBox"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="圖號 / 版次" Style="{StaticResource FieldLabel}"/>
+                                    <TextBox x:Name="DrawingNoBox"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <Grid Margin="0,0,0,14">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="12"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Text="業務" Style="{StaticResource FieldLabel}"/>
+                                    <views:SuggestBox x:Name="SalesBox"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="優先" Style="{StaticResource FieldLabel}"/>
+                                    <ComboBox x:Name="PriorityBox" SelectedIndex="0" ToolTip="急件、特急在清單上會標示出來，也可以「依優先」排序">
+                                        <ComboBoxItem Content="一般"/>
+                                        <ComboBoxItem Content="急件"/>
+                                        <ComboBoxItem Content="特急"/>
+                                    </ComboBox>
+                                </StackPanel>
+                            </Grid>
+
                             <TextBlock Text="認證" Style="{StaticResource FieldLabel}"/>
                             <StackPanel Orientation="Horizontal" Margin="2,2,0,16">
                                 <CheckBox x:Name="CEBox" Content="CE" Margin="0,0,28,0"/>
@@ -582,7 +660,30 @@
                     </ScrollViewer>
 
                     <!-- 操作按鈕固定在卡片底部，表單再長也不會被捲出畫面 -->
-                    <UniformGrid Grid.Row="2" Columns="3" Rows="1" Margin="0,16,0,0">
+                    <StackPanel Grid.Row="2" Margin="0,16,0,0">
+                    <UniformGrid Columns="3" Rows="1" Margin="0,0,0,10">
+                        <Button Margin="0,0,5,0" Padding="10,9" Click="RunCard_Click" AutomationProperties.Name="流程卡"
+                                ToolTip="打開這張工令的流程卡：各站別進度、品管檢驗、異常紀錄（在清單上按兩下也可以）">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE8FD;" Style="{StaticResource Icon}" FontSize="13" Margin="0,0,8,0"/>
+                                <TextBlock Text="流程卡"/>
+                            </StackPanel>
+                        </Button>
+                        <Button Margin="5,0,5,0" Padding="10,9" Click="PrintRunCard_Click" AutomationProperties.Name="列印流程卡" ToolTip="列印這張工令的流程卡（也可以存成 PDF）">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE749;" Style="{StaticResource Icon}" FontSize="13" Margin="0,0,8,0"/>
+                                <TextBlock Text="列印"/>
+                            </StackPanel>
+                        </Button>
+                        <Button Margin="5,0,0,0" Padding="10,9" Click="Copy_Click" AutomationProperties.Name="複製工令"
+                                ToolTip="用這張工令的資料開一張新的（日期、完成狀態、檢驗結果不會複製）">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE8C8;" Style="{StaticResource Icon}" FontSize="13" Margin="0,0,8,0"/>
+                                <TextBlock Text="複製工令"/>
+                            </StackPanel>
+                        </Button>
+                    </UniformGrid>
+                    <UniformGrid Columns="3" Rows="1">
                         <Button Style="{StaticResource PrimaryButton}" Margin="0,0,5,0" Padding="10,10" Click="Add_Click">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="&#xE710;" Style="{StaticResource Icon}" FontSize="13" Margin="0,0,8,0"/>
@@ -602,6 +703,7 @@
                             </StackPanel>
                         </Button>
                     </UniformGrid>
+                    </StackPanel>
                 </Grid>
             </Border>
         </Grid>

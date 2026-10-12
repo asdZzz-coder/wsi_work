@@ -89,6 +89,42 @@
                 </Trigger>
             </DataTemplate.Triggers>
         </DataTemplate>
+
+        <!-- 暫停 / 異常的工令：點一下在右邊表單打開 -->
+        <DataTemplate x:Key="AttentionTemplate">
+            <Button Style="{StaticResource CardButton}" AutomationProperties.Name="{Binding WorkOrder}">
+                <Border x:Name="Bd" Background="Transparent" CornerRadius="10" Padding="10,8" Margin="0,0,0,4"
+                        BorderBrush="{DynamicResource LineBrush}" BorderThickness="1">
+                    <DockPanel>
+                        <Border x:Name="Tag" DockPanel.Dock="Left" CornerRadius="7" Padding="7,2" Margin="0,0,10,0" VerticalAlignment="Top"
+                                Background="{DynamicResource DangerSoftBrush}">
+                            <TextBlock x:Name="TagText" Text="{Binding TagText}" FontSize="11.5" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource DangerBrush}"/>
+                        </Border>
+                        <StackPanel>
+                            <TextBlock FontSize="13" TextTrimming="CharacterEllipsis">
+                                <Run Text="{Binding WorkOrder, Mode=OneWay}" FontWeight="SemiBold"/>
+                                <Run Text="{Binding Subtitle, Mode=OneWay}" Foreground="{DynamicResource MutedBrush}"/>
+                            </TextBlock>
+                            <TextBlock Text="{Binding Detail}" FontSize="12" Foreground="{DynamicResource MutedBrush}"
+                                       TextWrapping="Wrap" Margin="0,2,0,0"/>
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+            </Button>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding OnHold}" Value="True">
+                    <Setter TargetName="Tag" Property="Background" Value="{DynamicResource WarningSoftBrush}"/>
+                    <Setter TargetName="TagText" Property="Foreground" Value="{DynamicResource WarningBrush}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                    <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                </DataTrigger>
+                <Trigger SourceName="Bd" Property="IsMouseOver" Value="True">
+                    <Setter TargetName="Bd" Property="Background" Value="{DynamicResource HoverBrush}"/>
+                </Trigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
     </UserControl.Resources>
 
     <ScrollViewer x:Name="Scroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
@@ -157,7 +193,36 @@
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
+
+                <!-- ===== 各站別在製 ===== -->
+                <Border Grid.Row="1" Grid.Column="0" Style="{StaticResource Panel}">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <TextBlock Text="&#xE8FD;" Style="{StaticResource Icon}" FontSize="14" Foreground="{DynamicResource AccentBrush}" Margin="0,0,8,0"/>
+                            <TextBlock Text="各站別在製" Style="{StaticResource PanelTitle}"/>
+                            <TextBlock Text="未交貨的工令目前做到哪一站" Style="{StaticResource PanelHint}"/>
+                        </StackPanel>
+                        <TextBlock x:Name="StationEmpty" Text="沒有未交貨的工令" Style="{StaticResource EmptyHint}"/>
+                        <ItemsControl x:Name="StationList" ItemTemplate="{StaticResource BarTemplate}" Margin="-6,0,4,0"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- ===== 暫停 / 異常 ===== -->
+                <Border Grid.Row="1" Grid.Column="2" Style="{StaticResource Panel}">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                            <TextBlock Text="&#xE7BA;" Style="{StaticResource Icon}" FontSize="14" Foreground="{DynamicResource WarningBrush}" Margin="0,0,8,0"/>
+                            <TextBlock Text="暫停 / 異常" Style="{StaticResource PanelTitle}"/>
+                            <TextBlock x:Name="AttentionHint" Style="{StaticResource PanelHint}"/>
+                        </StackPanel>
+                        <TextBlock x:Name="AttentionEmpty" Text="沒有暫停、異常未結案或檢驗不合格的工令" Style="{StaticResource EmptyHint}"/>
+                        <ScrollViewer MaxHeight="300" VerticalScrollBarVisibility="Auto">
+                            <ItemsControl x:Name="AttentionList" ItemTemplate="{StaticResource AttentionTemplate}" Margin="0,0,4,0"/>
+                        </ScrollViewer>
+                    </StackPanel>
+                </Border>
 
                 <!-- ===== 逾期項目 ===== -->
                 <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource Panel}">
@@ -190,7 +255,7 @@
                 </Border>
 
                 <!-- ===== 未來 8 週交貨 ===== -->
-                <Border Grid.Row="1" Grid.Column="0" Style="{StaticResource Panel}">
+                <Border Grid.Row="2" Grid.Column="0" Style="{StaticResource Panel}">
                     <StackPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
                             <TextBlock Text="&#xE9D2;" Style="{StaticResource Icon}" FontSize="14" Foreground="{DynamicResource AccentBrush}" Margin="0,0,8,0"/>
@@ -246,7 +311,7 @@
                 </Border>
 
                 <!-- ===== 人員負荷 ===== -->
-                <Border Grid.Row="1" Grid.Column="2" Style="{StaticResource Panel}">
+                <Border Grid.Row="2" Grid.Column="2" Style="{StaticResource Panel}">
                     <StackPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                             <TextBlock Text="&#xE716;" Style="{StaticResource Icon}" FontSize="14" Foreground="{DynamicResource AccentBrush}" Margin="0,0,8,0"/>
@@ -261,7 +326,7 @@
                 </Border>
 
                 <!-- ===== 客戶 ===== -->
-                <Border Grid.Row="2" Grid.Column="0" Style="{StaticResource Panel}">
+                <Border Grid.Row="3" Grid.Column="0" Style="{StaticResource Panel}">
                     <StackPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                             <TextBlock Text="&#xE821;" Style="{StaticResource Icon}" FontSize="14" Foreground="{DynamicResource AccentBrush}" Margin="0,0,8,0"/>
@@ -276,7 +341,7 @@
                 </Border>
 
                 <!-- ===== 最近交貨 ===== -->
-                <Border Grid.Row="2" Grid.Column="2" Style="{StaticResource Panel}">
+                <Border Grid.Row="3" Grid.Column="2" Style="{StaticResource Panel}">
                     <StackPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
                             <TextBlock Text="&#xE73E;" Style="{StaticResource Icon}" FontSize="14" Foreground="{DynamicResource SuccessBrush}" Margin="0,0,8,0"/>

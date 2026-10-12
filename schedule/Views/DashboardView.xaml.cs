@@ -8,8 +8,9 @@ namespace schedule.Views
     /// <summary>看板上的橫向長條（人員、客戶）。</summary>
     public class BarItem
     {
-        public BarItem(string name, int count, int max, string toolTip)
+        public BarItem(string name, int count, int max, string toolTip, bool searchable = true)
         {
+            Searchable = searchable;
             Name = name;
             Count = count;
             Fill = new GridLength(count, GridUnitType.Star);
@@ -22,6 +23,33 @@ namespace schedule.Views
         public GridLength Fill { get; }
         public GridLength Rest { get; }
         public string ToolTip { get; }
+
+        /// <summary>點一下用名稱搜尋（人員、客戶）；站別不搜尋。</summary>
+        public bool Searchable { get; }
+    }
+
+    /// <summary>看板上「暫停 / 異常」的一筆工令。</summary>
+    public class AttentionItem
+    {
+        public AttentionItem(Job job, bool selected)
+        {
+            Job = job;
+            IsSelected = selected;
+            OnHold = RunCardRules.IsOnHold(job);
+            TagText = OnHold ? "暫停" : RunCardRules.FailedChecks(job) > 0 ? "不合格" : "異常";
+            Subtitle = string.Join(" · ", new[] { job.Model, job.Customer }.Where(s => s.Trim().Length > 0));
+            var reasons = RunCardRules.AttentionReasons(job);
+            var open = (job.Issues ?? new()).Where(i => i.Closed == null).Select(i => i.Description.Trim()).Where(d => d.Length > 0).Take(2);
+            Detail = string.Join("；", reasons.Concat(open));
+        }
+
+        public Job Job { get; }
+        public string WorkOrder => Job.WorkOrder;
+        public string Subtitle { get; }
+        public string Detail { get; }
+        public string TagText { get; }
+        public bool OnHold { get; }
+        public bool IsSelected { get; }
     }
 
     /// <summary>看板上「未來 8 週交貨」的一根柱子。</summary>
@@ -125,6 +153,16 @@ namespace schedule.Views
 
             Bars(WorkloadList, WorkloadEmpty, s.Workload, "負責");
             Bars(CustomerList, CustomerEmpty, s.Customers, "客戶");
+
+            int maxStation = s.Stations.Count == 0 ? 0 : s.Stations.Max(c => c.Count);
+            StationList.ItemsSource = s.Stations
+                .Select(c => new BarItem(c.Name, c.Count, maxStation, $"{c.Name}：{c.Count} 筆工令正在這一站", searchable: false))
+                .ToList();
+            StationEmpty.Visibility = s.Stations.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+
+            AttentionList.ItemsSource = s.Attention.Select(j => new AttentionItem(j, ReferenceEquals(j, _selected))).ToList();
+            AttentionEmpty.Visibility = s.Attention.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+            AttentionHint.Text = s.Attention.Count > 0 ? $"{s.Attention.Count} 筆" : "";
         }
 
         private void Rows(ItemsControl list, TextBlock empty, List<TimelineEvent> events)
@@ -157,7 +195,12 @@ namespace schedule.Views
                     Build();
                     JobClicked?.Invoke(row.Job);
                     break;
-                case BarItem bar when bar.Name != "其他":
+                case AttentionItem item:
+                    _selected = item.Job;
+                    Build();
+                    JobClicked?.Invoke(item.Job);
+                    break;
+                case BarItem bar when bar.Searchable && bar.Name != "其他":
                     SearchRequested?.Invoke(bar.Name);
                     break;
             }
