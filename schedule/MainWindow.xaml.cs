@@ -40,7 +40,7 @@ namespace schedule
             RestoreView(); // 上次關閉時看的檢視
             ClearForm();
             Refresh();
-            Title = _updater.IsInstalled ? $"{AppTitle} v{_updater.CurrentVersion}" : $"{AppTitle}（開發版）";
+            Title = _updater.IsRelease ?$"{AppTitle} v{_updater.CurrentVersion}" : $"{AppTitle}（開發版）";
             StatusText.Text = $"版本 {_updater.CurrentVersion}";
             ThemeService.ThemeChanged += OnThemeChanged; // 切換主題（或系統深淺色改變）時更新標題列與按鈕
             UpdateThemeButton();
@@ -126,7 +126,7 @@ namespace schedule
         private async Task CheckForUpdateAsync(bool manual)
         {
             const string title = "檢查更新";
-            if (!_updater.IsInstalled)
+            if (!_updater.IsRelease)
             {
                 if (manual)
                     MessageBox.Show("目前是開發版（非安裝版），無法線上更新。", title);
@@ -139,6 +139,16 @@ namespace schedule
                 if (info == null)
                 {
                     if (manual) MessageBox.Show($"目前已是最新版本（{_updater.CurrentVersion}）。", title);
+                    return;
+                }
+
+                // 從 APP 啟動器開的：新版由啟動器下載，這裡只提醒
+                if (!_updater.IsInstalled)
+                {
+                    StatusText.Text = $"版本 {_updater.CurrentVersion}（有新版 {info.Version}，請從 APP 啟動器更新）";
+                    if (manual)
+                        MessageBox.Show($"發現新版本 {info.Version}（目前 {_updater.CurrentVersion}）。\n\n請到「APP 啟動器」按「更新到 v{info.Version}」，更新後從啟動器開啟新版。",
+                            "有新版本", MessageBoxButton.OK, MessageBoxImage.Information);
                     return;
                 }
 

@@ -52,12 +52,28 @@ namespace schedule.Services
             }
         }
 
-        public string CurrentVersion => IsInstalled ? Version.ToString() : "開發版";
+        /// <summary>
+        /// 是否由「APP 啟動器」下載執行（%LocalAppData%\AppLauncher\apps\workschedule\v1.2.0\...）。
+        /// 啟動器裝好一個版本會在版本資料夾放 .launcher.json；這種情況由啟動器負責更新，程式本身只檢查有沒有新版。
+        /// </summary>
+        public bool IsLauncherManaged { get; } = FindLauncherMarker(AppContext.BaseDirectory);
 
-        /// <summary>檢查是否有新版；沒有、或非安裝版則回傳 null。</summary>
+        /// <summary>正式版（ClickOnce 安裝或從啟動器開啟），不是直接從原始碼執行的開發版。</summary>
+        public bool IsRelease => IsInstalled || IsLauncherManaged;
+
+        public string CurrentVersion => IsRelease ? Version.ToString() : "開發版";
+
+        private static bool FindLauncherMarker(string dir)
+        {
+            for (var d = new DirectoryInfo(dir); d != null; d = d.Parent)
+                if (File.Exists(Path.Combine(d.FullName, ".launcher.json"))) return true;
+            return false;
+        }
+
+        /// <summary>檢查是否有新版；沒有、或開發版則回傳 null。</summary>
         public async Task<UpdateInfo?> CheckAsync()
         {
-            if (!IsInstalled) return null;
+            if (!IsRelease) return null;
 
             using var resp = await Http.GetAsync($"https://api.github.com/repos/{Owner}/{Repo}/releases/latest");
             resp.EnsureSuccessStatusCode();
