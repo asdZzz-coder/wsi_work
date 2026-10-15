@@ -5,8 +5,12 @@ using schedule.Models;
 namespace schedule.Services
 {
     /// <summary>匯入結果：讀到的工令，以及檔案裡有哪些欄位 / 工作表（舊版檔案缺的資料，合併時保留原本的）。</summary>
-    public record ExcelImport(List<Job> Jobs, int Skipped, IReadOnlySet<string> Columns, bool HasSteps, bool HasChecks, bool HasIssues)
+    public record ExcelImport(List<Job> Jobs, int Skipped, IReadOnlySet<string> Columns, bool HasSteps, bool HasChecks, bool HasIssues,
+        bool HasDispatches = false)
     {
+        /// <summary>「出料同步」欄寫的其他工令（檔案有這欄時，每張工令都有一筆，空白就是沒有同步）。</summary>
+        public Dictionary<Job, List<string>> Sync { get; init; } = new();
+
         /// <summary>
         /// 合併時用：匯入檔沒有的欄位、工作表（或工作表裡沒有這張工令的列），從原本那筆搬到匯入的那筆。
         /// </summary>
@@ -18,12 +22,14 @@ namespace schedule.Services
             if (!HasSteps || imported.Steps.Count == 0) imported.Steps = existing.Steps;
             if (!HasChecks || imported.Checks.Count == 0) imported.Checks = existing.Checks;
             if (!HasIssues || imported.Issues.Count == 0) imported.Issues = existing.Issues;
+            if (!HasDispatches || imported.Dispatches.Count == 0) imported.Dispatches = existing.Dispatches;
+            if (!Columns.Contains(ExcelService.SyncHeader)) imported.DispatchGroup = existing.DispatchGroup;
         }
     }
 
     /// <summary>
-    /// Excel 匯出 / 匯入。工作表「排程表」一列一個工令；另外三張工作表放流程卡：
-    /// 「流程站別」「品管檢驗」「異常紀錄」，用工令欄對應回工令。
+    /// Excel 匯出 / 匯入。工作表「排程表」一列一個工令；另外四張工作表放流程卡：
+    /// 「流程站別」「品管檢驗」「異常紀錄」「出料紀錄」，用工令欄對應回工令。
     /// 匯入時依第一列的標題找欄位（欄位順序可以調換），「目前站別」「狀態」是算出來的，只匯出、不匯入。
     /// </summary>
     public static class ExcelService
@@ -32,6 +38,7 @@ namespace schedule.Services
         public const string StepSheet = "流程站別";
         public const string CheckSheet = "品管檢驗";
         public const string IssueSheet = "異常紀錄";
+        public const string DispatchSheet = "出料紀錄";
 
         private const string HWorkOrder = "工令";
         private const string HModel = "機種";
@@ -59,13 +66,14 @@ namespace schedule.Services
         private const string HHold = "暫停原因";
         private const string HCurrent = "目前站別";
         private const string HStatus = "狀態";
+        internal const string SyncHeader = "出料同步";
 
         internal static readonly string[] Headers =
         {
             HWorkOrder, HModel, HQuantity, HCustomer, HCE, HTS,
             HMaterialPlan, HMaterialActual, HWiringPlan, HWiringActual, HDispatchPlan, HDispatchActual, HDeliveryPlan, HDeliveryActual,
             HInner, HOuter, HConsumables, HNote,
-            HProject, HOrder, HDrawing, HSales, PriorityHeader, HHold, HCurrent, HStatus,
+            HProject, HOrder, HDrawing, HSales, PriorityHeader, HHold, HCurrent, HStatus, SyncHeader,
         };
 
         private static readonly (string Header, Func<Job, DateTime?> Get, Action<Job, DateTime?> Set)[] DateColumns =
@@ -93,6 +101,7 @@ namespace schedule.Services
         private static readonly string[] StepHeaders = { HWorkOrder, "序", "站別", "對應", "負責人", "預計完成", "實際開始", "實際完成", "確認人", "略過", HNote };
         private static readonly string[] CheckHeaders = { HWorkOrder, "項目", "標準", "量測值", "結果", "檢驗員", "日期", HNote };
         private static readonly string[] IssueHeaders = { HWorkOrder, "日期", "類別", "說明", "負責人", "處理對策", "結案日期" };
+        private static readonly string[] DispatchHeaders = { HWorkOrder, "料號", "名稱", "規格", HQuantity, "單位", "出料日期", HNote };
 
         /// <summary>標題在第幾欄（從 1 開始）。</summary>
         internal static int Col(string header) => Array.IndexOf(Headers, header) + 1;
@@ -126,6 +135,7 @@ namespace schedule.Services
                 ws.Cell(r, Col(PriorityHeader)).SetValue(j.Priority == JobPriority.Normal ? "" : RunCardRules.PriorityText(j.Priority));
                 ws.Cell(r, Col(HCurrent)).SetValue(RunCardRules.ProgressText(j));
                 ws.Cell(r, Col(HStatus)).SetValue(RunCardRules.IsOnHold(j) ? "暫停" : ScheduleRules.StatusText(ScheduleRules.Status(j, today)));
+                ws.Cell(r, Col(SyncHeader)).SetValue(Escape(string.Join("、", DispatchSync.Partners(sorted, j).Select(p => p.WorkOrder.Trim()))));
                 r++;
             }
             ws.Column(Col(HCE)).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
@@ -187,6 +197,25 @@ namespace schedule.Services
                     r++;
                 }
             issues.Columns().AdjustToContents();
+
+            var dispatches = AddSheet(wb, DispatchSheet, DispatchHeaders);
+            r = 2;
+            foreach (var j in sorted)
+                foreach (var d in j.Dispatches ?? new())
+                {
+                    dispatches.Cell(r, 1).SetValue(Escape(j.WorkOrder));
+                    dispatches.Cell(r, 2).SetValue(Escape(d.PartNo));
+                    dispatches.Cell(r, 3).SetValue(Escape(d.Name));
+                    dispatches.Cell(r, 4).SetValue(Escape(d.Spec));
+                    if (double.TryParse(d.Quantity, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var qty))
+                        dispatches.Cell(r, 5).SetValue(qty);
+                    else dispatches.Cell(r, 5).SetValue(Escape(d.Quantity));
+                    dispatches.Cell(r, 6).SetValue(Escape(d.Unit));
+                    if (d.Date is { } date) SetDate(dispatches.Cell(r, 7), date);
+                    dispatches.Cell(r, 8).SetValue(Escape(d.Note));
+                    r++;
+                }
+            dispatches.Columns().AdjustToContents();
 
             wb.SaveAs(path);
         }
@@ -254,8 +283,21 @@ namespace schedule.Services
             bool hasSteps = ReadSheet(wb, StepSheet, byOrder, ReadStep);
             bool hasChecks = ReadSheet(wb, CheckSheet, byOrder, ReadCheck);
             bool hasIssues = ReadSheet(wb, IssueSheet, byOrder, ReadIssue);
+            bool hasDispatches = ReadSheet(wb, DispatchSheet, byOrder, ReadDispatch);
 
-            return new ExcelImport(result, skipped, new HashSet<string>(col.Keys, StringComparer.OrdinalIgnoreCase), hasSteps, hasChecks, hasIssues);
+            // 出料同步：先記下每張工令寫了哪些工令，合併進現有資料後再分組
+            var sync = new Dictionary<Job, List<string>>();
+            if (col.ContainsKey(SyncHeader))
+                foreach (var row in ws.RowsUsed().Skip(1))
+                {
+                    if (!byOrder.TryGetValue(Text(row, col, HWorkOrder).Trim(), out var job) || sync.ContainsKey(job)) continue;
+                    sync[job] = Text(row, col, SyncHeader)
+                        .Split(new[] { '、', ',', '，', ';', '；', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                        .ToList();
+                }
+
+            return new ExcelImport(result, skipped, new HashSet<string>(col.Keys, StringComparer.OrdinalIgnoreCase), hasSteps, hasChecks, hasIssues,
+                hasDispatches) { Sync = sync };
         }
 
         private static Job? ReadRow(IXLRow row, Dictionary<string, int> col)
@@ -363,6 +405,23 @@ namespace schedule.Services
                 Owner = Text(row, col, "負責人").Trim(),
                 Action = Text(row, col, "處理對策").Trim(),
                 Closed = LenientDate(Cell(row, col, "結案日期")),
+            });
+        }
+
+        private static void ReadDispatch(IXLRow row, Dictionary<string, int> col, Job job)
+        {
+            var partNo = Text(row, col, "料號").Trim();
+            var name = Text(row, col, "名稱").Trim();
+            if (partNo.Length == 0 && name.Length == 0) return;
+            job.Dispatches.Add(new DispatchItem
+            {
+                PartNo = partNo,
+                Name = name,
+                Spec = Text(row, col, "規格").Trim(),
+                Quantity = Text(row, col, HQuantity).Trim(),
+                Unit = Text(row, col, "單位").Trim(),
+                Date = LenientDate(Cell(row, col, "出料日期")),
+                Note = Text(row, col, HNote),
             });
         }
 

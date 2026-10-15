@@ -11,6 +11,7 @@ namespace schedule.Views
 {
     /// <summary>
     /// 列印流程卡（A4 直式、黑白）：工令條碼、基本資料、流程站別（留簽名欄）、品管檢驗、異常紀錄、簽核欄。
+    /// 另外可以印出料單（料號、名稱、規格、數量…與同步機台）。
     /// 選「Microsoft Print to PDF」就能存成 PDF。
     /// </summary>
     public static class RunCardPrinter
@@ -54,19 +55,7 @@ namespace schedule.Views
         public static FlowDocument Build(Job job, double pageWidth, double pageHeight, DateTime printedAt)
         {
             RunCardRules.Ensure(job);
-            var doc = new FlowDocument
-            {
-                PageWidth = pageWidth,
-                PageHeight = pageHeight,
-                PagePadding = new Thickness(40, 30, 40, 30),
-                ColumnWidth = double.PositiveInfinity,
-                FontFamily = new FontFamily("Microsoft JhengHei UI, Microsoft JhengHei, Segoe UI"),
-                FontSize = 10.5,
-                Foreground = Ink,
-                Background = Brushes.White,
-                TextAlignment = TextAlignment.Left,
-            };
-
+            var doc = NewDocument(pageWidth, pageHeight);
             var width = pageWidth - doc.PagePadding.Left - doc.PagePadding.Right;
             doc.Blocks.Add(TitleBlock(width, job, printedAt));
             doc.Blocks.Add(InfoTable(width, job));
@@ -82,6 +71,100 @@ namespace schedule.Views
                 doc.Blocks.Add(new Paragraph(new Run(job.Note.Trim())) { Margin = new Thickness(0, 0, 0, 6) });
             }
             doc.Blocks.Add(SignTable(width));
+            return doc;
+        }
+
+        // ---------- 出料單 ----------
+
+        public static void PrintDispatch(Job job, IReadOnlyList<string> partners, Window owner, Action<string>? status = null)
+        {
+            var dlg = new PrintDialog();
+            try
+            {
+                dlg.PrintTicket.PageMediaSize = new PageMediaSize(PageMediaSizeName.ISOA4);
+                dlg.PrintTicket.PageOrientation = PageOrientation.Portrait;
+            }
+            catch (Exception ex) when (ex is PrintQueueException or InvalidOperationException) { }
+            if (dlg.ShowDialog() != true) return;
+
+            try
+            {
+                var doc = BuildDispatch(job, partners, dlg.PrintableAreaWidth, dlg.PrintableAreaHeight, DateTime.Now);
+                dlg.PrintDocument(((IDocumentPaginatorSource)doc).DocumentPaginator, $"出料單 {job.WorkOrder}");
+                status?.Invoke($"已送出列印：出料單 {job.WorkOrder}");
+            }
+            catch (Exception ex) when (ex is PrintQueueException or InvalidOperationException or System.IO.IOException)
+            {
+                MessageBox.Show(owner, $"列印失敗：{ex.Message}", "列印出料單", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        /// <summary>產生出料單（料件多時會自動換頁）。partners 是同步出料的其他工令。</summary>
+        public static FlowDocument BuildDispatch(Job job, IReadOnlyList<string> partners, double pageWidth, double pageHeight, DateTime printedAt)
+        {
+            var doc = NewDocument(pageWidth, pageHeight);
+            var width = pageWidth - doc.PagePadding.Left - doc.PagePadding.Right;
+
+            var title = NewTable(width, 1.6, 1);
+            title.Margin = new Thickness(0, 0, 0, 8);
+            title.BorderThickness = new Thickness(0);
+            var top = AddRow(title);
+            var heading = new Paragraph { Margin = new Thickness(0) };
+            heading.Inlines.Add(new Run("出料單") { FontSize = 20, FontWeight = FontWeights.Bold });
+            heading.Inlines.Add(new Run("　MATERIAL ISSUE") { FontSize = 12, Foreground = Faint });
+            var left = new TableCell(heading) { BorderThickness = new Thickness(0) };
+            left.Blocks.Add(new Paragraph(new Run($"列印時間 {printedAt:yyyy/MM/dd HH:mm}　·　共 {job.Dispatches.Count} 項"))
+                { Margin = new Thickness(0, 4, 0, 0), Foreground = Faint, FontSize = 9.5 });
+            top.Cells.Add(left);
+            top.Cells.Add(BarcodeCell(job.WorkOrder));
+            doc.Blocks.Add(title);
+
+            const double label = 62, value = 116;
+            var info = NewTable(width, label, value, label, value, label, value, label, value);
+            info.Margin = new Thickness(0, 0, 0, 10);
+            var items = new (string, string)[]
+            {
+                ("工令", job.WorkOrder), ("機種", job.Model), ("數量", job.Quantity > 0 ? $"{job.Quantity:#,0}" : ""), ("客戶", job.Customer),
+                ("案名", job.ProjectName), ("圖號 / 版次", job.DrawingNo), ("預計出料", TextFormat.Date(job.DispatchPlan)), ("實際出料", TextFormat.Date(job.DispatchActual)),
+            };
+            for (int i = 0; i < items.Length; i += 4)
+            {
+                var row = AddRow(info);
+                for (int k = i; k < i + 4; k++)
+                {
+                    row.Cells.Add(Cell(items[k].Item1, header: true));
+                    row.Cells.Add(Cell(items[k].Item2, bold: k == 0));
+                }
+            }
+            var syncRow = AddRow(info);
+            syncRow.Cells.Add(Cell("同步機台", header: true));
+            syncRow.Cells.Add(new TableCell(CellParagraph(partners.Count > 0 ? string.Join("、", partners) : "無（只有這台）", bold: partners.Count > 0))
+                { ColumnSpan = 7, BorderBrush = Line, BorderThickness = new Thickness(0, 0, 0.75, 0.75), Padding = new Thickness(4, 2.5, 4, 2.5) });
+            doc.Blocks.Add(info);
+
+            var table = NewTable(width, 26, 104, 128, 214, 46, 40, 74, 92);
+            AddHeader(table, "序", "料號", "名稱", "規格", "數量", "單位", "出料日期", "備註");
+            int no = 1;
+            foreach (var d in job.Dispatches)
+            {
+                var row = AddRow(table);
+                row.Cells.Add(Cell((no++).ToString(), center: true));
+                row.Cells.Add(Cell(d.PartNo));
+                row.Cells.Add(Cell(d.Name));
+                row.Cells.Add(Cell(d.Spec, small: true));
+                row.Cells.Add(Cell(d.Quantity, center: true));
+                row.Cells.Add(Cell(d.Unit, center: true));
+                row.Cells.Add(Cell(TextFormat.Date(d.Date)));
+                row.Cells.Add(Cell(d.Note, small: true));
+            }
+            doc.Blocks.Add(table);
+
+            var sign = NewTable(width, 1, 1, 1, 1);
+            sign.Margin = new Thickness(0, 12, 0, 0);
+            AddHeader(sign, "製表", "發料", "領料", "主管");
+            var signRow = AddRow(sign);
+            for (int c = 0; c < 4; c++) signRow.Cells.Add(Cell("", extraHeight: 30));
+            doc.Blocks.Add(sign);
             return doc;
         }
 
@@ -104,14 +187,19 @@ namespace schedule.Views
             if (RunCardRules.IsOnHold(job)) sub.Inlines.Add(new Run($"　·　暫停：{job.HoldReason.Trim()}") { FontWeight = FontWeights.Bold, Foreground = Ink });
             row.Cells.Add(new TableCell(title) { BorderThickness = new Thickness(0) });
             row.Cells[0].Blocks.Add(sub);
-
-            var right = new TableCell { BorderThickness = new Thickness(0), TextAlignment = TextAlignment.Center };
-            if (Barcode(job.WorkOrder) is { } barcode)
-                right.Blocks.Add(new BlockUIContainer(barcode) { Margin = new Thickness(0) });
-            right.Blocks.Add(new Paragraph(new Run(job.WorkOrder) { FontSize = 13, FontWeight = FontWeights.Bold, FontFamily = new FontFamily("Consolas, Microsoft JhengHei UI") })
-                { Margin = new Thickness(0, 2, 0, 0), TextAlignment = TextAlignment.Center });
-            row.Cells.Add(right);
+            row.Cells.Add(BarcodeCell(job.WorkOrder));
             return table;
+        }
+
+        /// <summary>右上角的工令條碼（印不出條碼時只有文字）。</summary>
+        private static TableCell BarcodeCell(string workOrder)
+        {
+            var right = new TableCell { BorderThickness = new Thickness(0), TextAlignment = TextAlignment.Center };
+            if (Barcode(workOrder) is { } barcode)
+                right.Blocks.Add(new BlockUIContainer(barcode) { Margin = new Thickness(0) });
+            right.Blocks.Add(new Paragraph(new Run(workOrder) { FontSize = 13, FontWeight = FontWeights.Bold, FontFamily = new FontFamily("Consolas, Microsoft JhengHei UI") })
+                { Margin = new Thickness(0, 2, 0, 0), TextAlignment = TextAlignment.Center });
+            return right;
         }
 
         /// <summary>Code 39 條碼；工令有中文等不支援的字元時回傳 null（只印文字）。</summary>
@@ -282,9 +370,21 @@ namespace schedule.Views
             foreach (var t in titles) row.Cells.Add(Cell(t, header: true));
         }
 
-        private static TableCell Cell(string text, bool header = false, bool bold = false, bool center = false, bool muted = false, bool small = false, double extraHeight = 0)
+        private static FlowDocument NewDocument(double pageWidth, double pageHeight) => new()
         {
-            var paragraph = new Paragraph(new Run(text))
+            PageWidth = pageWidth,
+            PageHeight = pageHeight,
+            PagePadding = new Thickness(40, 30, 40, 30),
+            ColumnWidth = double.PositiveInfinity,
+            FontFamily = new FontFamily("Microsoft JhengHei UI, Microsoft JhengHei, Segoe UI"),
+            FontSize = 10.5,
+            Foreground = Ink,
+            Background = Brushes.White,
+            TextAlignment = TextAlignment.Left,
+        };
+
+        private static Paragraph CellParagraph(string text, bool header = false, bool bold = false, bool center = false, bool muted = false, bool small = false) =>
+            new(new Run(text))
             {
                 Margin = new Thickness(0),
                 FontWeight = header || bold ? FontWeights.Bold : FontWeights.Normal,
@@ -294,6 +394,10 @@ namespace schedule.Views
                 // 空白格也撐出可以手寫的高度
                 LineHeight = 15,
             };
+
+        private static TableCell Cell(string text, bool header = false, bool bold = false, bool center = false, bool muted = false, bool small = false, double extraHeight = 0)
+        {
+            var paragraph = CellParagraph(text, header, bold, center, muted, small);
             return new TableCell(paragraph)
             {
                 BorderBrush = Line,

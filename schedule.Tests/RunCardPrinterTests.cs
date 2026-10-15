@@ -70,6 +70,29 @@ namespace schedule.Tests
             });
         }
 
+        [Theory]
+        [InlineData(5, 1)]    // 一頁
+        [InlineData(60, 2)]   // 料件多：自動換頁
+        public void BuildDispatch_PaginatesToA4(int count, int minPages)
+        {
+            RunSta(() =>
+            {
+                var job = SampleJob("W2610-001");
+                for (int i = 1; i <= count; i++)
+                    job.Dispatches.Add(new DispatchItem
+                    {
+                        PartNo = $"NFB-{i:000}", Name = i % 3 == 0 ? "無熔絲開關" : "電磁接觸器", Spec = "3P 100AF 75AT 25kA",
+                        Quantity = (i % 4 + 1).ToString(), Unit = "只", Date = new DateTime(2026, 10, 5), Note = i == 1 ? "客供" : "",
+                    });
+                var doc = RunCardPrinter.BuildDispatch(job, new[] { "W2610-002", "W2610-003" }, A4Width, A4Height, new DateTime(2026, 10, 12, 9, 30, 0));
+                var paginator = ((IDocumentPaginatorSource)doc).DocumentPaginator;
+                paginator.ComputePageCount();
+                var folder = Environment.GetEnvironmentVariable("WORKSCHEDULE_PRINT_PREVIEW");
+                if (!string.IsNullOrEmpty(folder)) SavePages(paginator, folder, $"dispatch{count}");
+                Assert.InRange(paginator.PageCount, minPages, minPages + 1);
+            });
+        }
+
         private static void SavePages(DocumentPaginator paginator, string folder, string workOrder)
         {
             {

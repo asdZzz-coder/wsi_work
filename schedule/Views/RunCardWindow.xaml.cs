@@ -3,6 +3,7 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Input;
 using schedule.Models;
 using schedule.Services;
@@ -22,14 +23,28 @@ namespace schedule.Views
         private readonly ObservableCollection<StepRow> _steps;
         private readonly ObservableCollection<CheckRow> _checks;
         private readonly ObservableCollection<IssueRow> _issues;
+        private readonly ObservableCollection<DispatchRow> _dispatches;
+        private readonly List<SyncRow> _syncRows;
+        private readonly ICollectionView _syncView;
+        private readonly Dictionary<string, PartInfo> _catalog;
+        private readonly Dictionary<DispatchRow, PartInfo> _autoFilled = new();
+        private readonly IReadOnlyList<string> _partNos, _partNames, _units;
         private bool _dirty;
         private bool _loading = true;
         private bool _closingAfterSave;
 
+        private static readonly string[] DefaultUnits = { "個", "只", "支", "組", "套", "台", "條", "片", "包", "盒", "米", "捲", "式" };
+
         /// <summary>按「儲存」後的工令（Id 與原本相同）；沒儲存就關掉為 null。</summary>
         public Job? Result { get; private set; }
 
-        public RunCardWindow(Job job, IReadOnlyList<string> people)
+        /// <summary>按「儲存」時勾選要同步出料的其他工令 Id。</summary>
+        public List<string> SyncIds { get; private set; } = new();
+
+        public RunCardWindow(Job job, IReadOnlyList<string> people) : this(job, people, new[] { job }) { }
+
+        /// <param name="allJobs">所有工令：出料同步的候選機台，以及料號、名稱的下拉選單。</param>
+        public RunCardWindow(Job job, IReadOnlyList<string> people, IReadOnlyList<Job> allJobs)
         {
             InitializeComponent();
             // 小螢幕（例如筆電）上不要讓視窗超出可用範圍
@@ -50,6 +65,22 @@ namespace schedule.Views
             StepList.ItemsSource = _steps;
             CheckList.ItemsSource = _checks;
             IssueList.ItemsSource = _issues;
+
+            // 出料紀錄與同步
+            _dispatches = new ObservableCollection<DispatchRow>(work.Dispatches.Select(d => new DispatchRow(d)));
+            Watch(_dispatches);
+            DispatchList.ItemsSource = _dispatches;
+            _catalog = DispatchSync.Catalog(allJobs);
+            _partNos = DispatchSync.Values(allJobs, d => d.PartNo);
+            _partNames = DispatchSync.Values(allJobs, d => d.Name);
+            _units = DispatchSync.Values(allJobs, d => d.Unit).Concat(DefaultUnits).Distinct().ToList();
+            var partners = DispatchSync.Partners(allJobs, job).Select(p => p.Id).ToHashSet();
+            _syncRows = SyncCandidates(job, allJobs, partners);
+            foreach (var row in _syncRows) row.PropertyChanged += Row_Changed;
+            _syncView = CollectionViewSource.GetDefaultView(_syncRows);
+            _syncView.Filter = o => SyncMatches((SyncRow)o, SyncSearchBox.Text);
+            SyncList.ItemsSource = _syncView;
+            SyncEmpty.Visibility = _syncRows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
 
             HoldBox.IsChecked = work.HoldReason.Trim().Length > 0;
             HoldReasonBox.Text = work.HoldReason;
@@ -132,6 +163,74 @@ namespace schedule.Views
             int open = _issues.Count(i => i.IsOpen);
             TabIssuesText.Text = open > 0 ? $"異常 / 變更（{open} 未結案）" : _issues.Count > 0 ? $"異常 / 變更（{_issues.Count}）" : "異常 / 變更";
             IssueEmpty.Visibility = _issues.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+
+            int items = _dispatches.Count(d => !d.IsEmpty);
+            int synced = _syncRows.Count(r => r.IsChecked);
+            TabDispatchText.Text = items > 0 ? $"出料紀錄（{items} 項）" : "出料紀錄";
+            DispatchEmpty.Visibility = _dispatches.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+            SyncCount.Text = synced > 0 ? $"已勾 {synced} 台" : "";
+        }
+
+        // ---------- 出料同步的候選機台 ----------
+
+        /// <summary>其他工令：已勾的排最前面，再來是同機種、還沒交貨的。</summary>
+        private static List<SyncRow> SyncCandidates(Job job, IReadOnlyList<Job> allJobs, HashSet<string> partners)
+        {
+            var model = job.Model.Trim();
+            return allJobs
+                .Where(j => j.Id != job.Id)
+                .Select(j =>
+                {
+                    bool same = model.Length > 0 && string.Equals(j.Model.Trim(), model, StringComparison.OrdinalIgnoreCase);
+                    return new SyncRow(j, SyncDetail(j, job, allJobs), partners.Contains(j.Id), same ? 0 : 1);
+                })
+                .OrderBy(r => !r.IsChecked)
+                .ThenBy(r => r.SameModel)
+                .ThenBy(r => r.Job.DeliveryActual != null)
+                .ThenBy(r => r.WorkOrder, NaturalComparer.Instance)
+                .ToList();
+        }
+
+        /// <summary>機種 · 客戶，加上已交貨、已有幾項出料、目前和哪幾台同步。</summary>
+        private static string SyncDetail(Job other, Job job, IReadOnlyList<Job> allJobs)
+        {
+            var parts = new List<string>();
+            var head = string.Join(" · ", new[] { other.Model, other.Customer }.Where(s => s.Trim().Length > 0).Select(s => s.Trim()));
+            if (head.Length > 0) parts.Add(head);
+            if (other.DeliveryActual != null) parts.Add("已交貨");
+            if ((other.Dispatches?.Count ?? 0) > 0) parts.Add($"出料 {other.Dispatches!.Count} 項");
+            var otherPartners = DispatchSync.Partners(allJobs, other).Where(p => p.Id != job.Id).Select(p => p.WorkOrder.Trim()).ToList();
+            if (otherPartners.Count > 0 && other.DispatchGroup != job.DispatchGroup)
+                parts.Add($"目前和 {string.Join("、", otherPartners.Take(3))}{(otherPartners.Count > 3 ? " 等" : "")} 同步");
+            return string.Join("　", parts);
+        }
+
+        private static bool SyncMatches(SyncRow row, string text)
+        {
+            text = text.Trim();
+            if (text.Length == 0 || row.IsChecked) return true;
+            return new[] { row.Job.WorkOrder, row.Job.Model, row.Job.Customer, row.Job.ProjectName }
+                .Any(s => s.Contains(text, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private void SyncSearch_Changed(object sender, TextChangedEventArgs e) => _syncView?.Refresh();
+
+        private void SyncSameModel_Click(object sender, RoutedEventArgs e)
+        {
+            int n = 0;
+            foreach (var row in _syncRows.Where(r => r.SameModel == 0 && r.Job.DeliveryActual == null && !r.IsChecked))
+            {
+                row.IsChecked = true;
+                n++;
+            }
+            StatusText.Text = n > 0 ? $"已勾選 {n} 台同機種、還沒交貨的工令"
+                : _syncRows.Any(r => r.SameModel == 0) ? "同機種的工令都已經勾了（或已交貨）" : "沒有和這台同機種的工令";
+        }
+
+        private void SyncNone_Click(object sender, RoutedEventArgs e)
+        {
+            foreach (var row in _syncRows) row.IsChecked = false;
+            StatusText.Text = "這台不和其他機台同步出料（儲存後生效）";
         }
 
         private static DateTime? Parse(string text) => TextFormat.TryParseOptionalDate(text, out var d) ? d : null;
@@ -154,7 +253,24 @@ namespace schedule.Views
         {
             // 算出來的屬性（狀態等）不算修改
             if (e.PropertyName is "State" or "StateText" or "StateTag" or "IsFail" or "IsOpen" or "Number" or "ImplicitlyPassed") return;
+            if (sender is DispatchRow row && e.PropertyName == nameof(DispatchRow.PartNo)) AutoFill(row);
             MarkDirty();
+        }
+
+        /// <summary>
+        /// 打之前出過的料號時帶入名稱、規格、單位（只填空白的格子，或上次自動帶入、還沒改過的格子）。
+        /// </summary>
+        private void AutoFill(DispatchRow row)
+        {
+            _catalog.TryGetValue(row.PartNo.Trim(), out var info);
+            _autoFilled.TryGetValue(row, out var previous);
+            if (info == null && previous == null) return;
+
+            static bool Replaceable(string current, string? auto) => current.Trim().Length == 0 || (auto != null && current == auto);
+            if (Replaceable(row.Name, previous?.Name)) row.Name = info?.Name ?? "";
+            if (Replaceable(row.Spec, previous?.Spec)) row.Spec = info?.Spec ?? "";
+            if (Replaceable(row.Unit, previous?.Unit)) row.Unit = info?.Unit ?? "";
+            if (info != null) _autoFilled[row] = info; else _autoFilled.Remove(row);
         }
 
         private void MarkDirty()
@@ -182,6 +298,7 @@ namespace schedule.Views
             StepsPanel.Visibility = TabSteps.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
             ChecksPanel.Visibility = TabChecks.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
             IssuesPanel.Visibility = TabIssues.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+            DispatchPanel.Visibility = TabDispatch.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
             UpdateTabHint();
         }
 
@@ -189,6 +306,7 @@ namespace schedule.Views
         {
             TabHint.Text = TabChecks.IsChecked == true ? "量測值可以寫數字和單位，例如 50 MΩ。結果選「不合格」時，這張工令會列在「暫停 / 異常」。"
                 : TabIssues.IsChecked == true ? "還沒結案的紀錄會讓工令列在「暫停 / 異常」，處理好後按 ✓ 結案。"
+                : TabDispatch.IsChecked == true ? "打之前出過的料號，名稱、規格、單位會自動帶入。右邊勾選的機台會和這台共用同一份出料紀錄。"
                 : "預計完成日期請依流程順序填；按日曆圖示選日期，也可以直接打 10/6。";
         }
 
@@ -249,6 +367,52 @@ namespace schedule.Views
         {
             for (int i = 0; i < _steps.Count; i++) _steps[i].Number = i + 1;
             for (int i = 0; i < _checks.Count; i++) _checks[i].Number = i + 1;
+            for (int i = 0; i < _dispatches.Count; i++) _dispatches[i].Number = i + 1;
+        }
+
+        private void AddDispatch_Click(object sender, RoutedEventArgs e)
+        {
+            var row = new DispatchRow(new DispatchItem());
+            // 新的料件沿用上一筆的出料日期（通常同一天出好幾項）
+            if (_dispatches.LastOrDefault() is { } last) row.DateText = last.DateText;
+            _dispatches.Add(row);
+            Renumber();
+            FocusRow(DispatchList, row, "PartNoBox");
+        }
+
+        private void DispatchDelete_Click(object sender, RoutedEventArgs e)
+        {
+            if (RowOf<DispatchRow>(sender) is not { } row) return;
+            var name = new[] { row.PartNo, row.Name }.FirstOrDefault(s => s.Trim().Length > 0)?.Trim();
+            if (!row.IsEmpty && MessageBox.Show(this, $"要刪除「{name}」嗎？", "刪除料件", MessageBoxButton.YesNo, MessageBoxImage.Question,
+                    MessageBoxResult.No) != MessageBoxResult.Yes) return;
+            _dispatches.Remove(row);
+            _autoFilled.Remove(row);
+            Renumber();
+        }
+
+        private void DispatchToday_Click(object sender, RoutedEventArgs e)
+        {
+            int n = 0;
+            foreach (var row in _dispatches.Where(d => !d.IsEmpty && d.DateText.Trim().Length == 0))
+            {
+                row.DateText = Today;
+                n++;
+            }
+            StatusText.Text = n == 0 ? "沒有出料日期空白的料件" : $"{n} 個料件的出料日期填了今天";
+        }
+
+        private void PrintDispatch_Click(object sender, RoutedEventArgs e)
+        {
+            var job = Build(validate: false);
+            if (job == null) return;
+            if (job.Dispatches.Count == 0)
+            {
+                MessageBox.Show(this, "還沒有出料紀錄可以列印。", "列印出料單", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+            var partners = _syncRows.Where(r => r.IsChecked).Select(r => r.WorkOrder.Trim()).ToList();
+            RunCardPrinter.PrintDispatch(job, partners, this, s => StatusText.Text = s);
         }
 
         private void CheckDelete_Click(object sender, RoutedEventArgs e)
@@ -330,7 +494,14 @@ namespace schedule.Views
         private void Suggest_Loaded(object sender, RoutedEventArgs e)
         {
             if (sender is not SuggestBox box) return;
-            box.Items = box.Tag as string == "IssueType" ? IssueTypes : _people;
+            box.Items = (box.Tag as string) switch
+            {
+                "IssueType" => IssueTypes,
+                "PartNo" => _partNos,
+                "PartName" => _partNames,
+                "Unit" => _units,
+                _ => _people,
+            };
         }
 
         // ---------- 儲存 / 取消 / 列印 ----------
@@ -383,6 +554,21 @@ namespace schedule.Views
                 job.Issues.Add(row.ToRecord());
             }
 
+            job.Dispatches = new();
+            for (int i = 0; i < _dispatches.Count; i++)
+            {
+                var row = _dispatches[i];
+                if (row.IsEmpty) continue;
+                if (validate)
+                {
+                    if (row.PartNo.Trim().Length == 0 && row.Name.Trim().Length == 0)
+                        return Invalid(TabDispatch, $"第 {i + 1} 個料件還沒填料號或名稱。");
+                    if (!TextFormat.TryParseOptionalDate(row.DateText, out _))
+                        return Invalid(TabDispatch, $"第 {i + 1} 個料件的出料日期看不懂，請用 2026/10/06 或 10/6 這種寫法。");
+                }
+                job.Dispatches.Add(row.ToItem());
+            }
+
             var reason = HoldReasonBox.Text.Trim();
             if (HoldBox.IsChecked == true)
             {
@@ -413,7 +599,24 @@ namespace schedule.Views
                 MessageBox.Show(this, $"{warning}\n\n確定要這樣存嗎？", "流程卡", MessageBoxButton.YesNo, MessageBoxImage.Question,
                     MessageBoxResult.No) != MessageBoxResult.Yes)
                 return false;
+
+            // 新勾的機台原本有不一樣的出料紀錄：會被這台的取代，先確認
+            var ids = _syncRows.Where(r => r.IsChecked).Select(r => r.Id).ToList();
+            var overwrite = DispatchSync.WouldOverwrite(_syncRows.Select(r => r.Job), _original, ids, job.Dispatches);
+            if (overwrite.Count > 0)
+            {
+                var names = string.Join("\n", overwrite.Take(8).Select(j => $"・{j.WorkOrder}（原本 {j.Dispatches.Count} 項）"));
+                if (overwrite.Count > 8) names += $"\n…等 {overwrite.Count} 台";
+                if (MessageBox.Show(this, $"下面這些機台原本有自己的出料紀錄，同步後會改成和「{job.WorkOrder}」一樣（{job.Dispatches.Count} 項）：\n\n{names}\n\n確定要同步嗎？",
+                        "出料同步", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) != MessageBoxResult.Yes)
+                {
+                    TabDispatch.IsChecked = true;
+                    return false;
+                }
+            }
+
             Result = job;
+            SyncIds = ids;
             _dirty = false;
             return true;
         }

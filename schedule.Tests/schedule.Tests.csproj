@@ -36,6 +36,7 @@
     <Compile Include="..\schedule\Models\RunCard.cs" Link="Source\RunCard.cs" />
     <Compile Include="..\schedule\Services\RunCardRules.cs" Link="Source\RunCardRules.cs" />
     <Compile Include="..\schedule\Services\Code39.cs" Link="Source\Code39.cs" />
+    <Compile Include="..\schedule\Services\DispatchSync.cs" Link="Source\DispatchSync.cs" />
     <Compile Include="..\schedule\Views\RunCardPrinter.cs" Link="Source\RunCardPrinter.cs" />
   </ItemGroup>
 

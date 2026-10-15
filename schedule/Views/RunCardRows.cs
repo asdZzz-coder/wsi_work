@@ -211,4 +211,69 @@ namespace schedule.Views
             Closed = ParseOrNull(ClosedText),
         };
     }
+
+    /// <summary>出料紀錄的一列。</summary>
+    public sealed class DispatchRow : EditRow
+    {
+        private int _number;
+        private string _partNo, _name, _spec, _quantity, _unit, _date, _note;
+
+        public DispatchRow(DispatchItem item)
+        {
+            _partNo = item.PartNo;
+            _name = item.Name;
+            _spec = item.Spec;
+            _quantity = item.Quantity;
+            _unit = item.Unit;
+            _date = TextFormat.Date(item.Date);
+            _note = item.Note;
+        }
+
+        public int Number { get => _number; set => Set(ref _number, value); }
+        public string PartNo { get => _partNo; set => Set(ref _partNo, value); }
+        public string Name { get => _name; set => Set(ref _name, value); }
+        public string Spec { get => _spec; set => Set(ref _spec, value); }
+        public string Quantity { get => _quantity; set => Set(ref _quantity, value); }
+        public string Unit { get => _unit; set => Set(ref _unit, value); }
+        public string DateText { get => _date; set => Set(ref _date, value); }
+        public string Note { get => _note; set => Set(ref _note, value); }
+
+        public bool IsEmpty => PartNo.Trim().Length == 0 && Name.Trim().Length == 0 && Spec.Trim().Length == 0 &&
+                               Quantity.Trim().Length == 0 && Note.Trim().Length == 0;
+
+        public DispatchItem ToItem() => new()
+        {
+            PartNo = PartNo.Trim(),
+            Name = Name.Trim(),
+            Spec = Spec.Trim(),
+            Quantity = Quantity.Trim(),
+            Unit = Unit.Trim(),
+            Date = ParseOrNull(DateText),
+            Note = Note.TrimEnd(),
+        };
+    }
+
+    /// <summary>「同步出料」清單上的一台機台（其他工令）。</summary>
+    public sealed class SyncRow : EditRow
+    {
+        private bool _isChecked;
+
+        public SyncRow(Job job, string detail, bool isChecked, int sameModel)
+        {
+            Job = job;
+            Detail = detail;
+            _isChecked = isChecked;
+            SameModel = sameModel;
+        }
+
+        public Job Job { get; }
+        public string Id => Job.Id;
+        public string WorkOrder => Job.WorkOrder;
+        public string Detail { get; }
+        /// <summary>0 = 和這台同機種，1 = 不同（排序用）。</summary>
+        public int SameModel { get; }
+        public bool IsChecked { get => _isChecked; set => Set(ref _isChecked, value); }
+
+        public override string ToString() => WorkOrder;
+    }
 }

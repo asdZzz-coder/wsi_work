@@ -41,6 +41,10 @@ namespace schedule.Models
         public List<CheckItem> Checks { get; set; } = new();
         public List<IssueRecord> Issues { get; set; } = new();
 
+        // 出料紀錄。DispatchGroup 相同（且不是空白）的工令共用同一份出料紀錄，改一台其他台跟著改
+        public List<DispatchItem> Dispatches { get; set; } = new();
+        public string DispatchGroup { get; set; } = "";
+
         // 螢幕閱讀器與 UI 自動化讀到的名稱（不影響存檔）
         public override string ToString() => WorkOrder;
     }

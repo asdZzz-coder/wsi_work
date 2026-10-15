@@ -65,9 +65,12 @@ namespace schedule.Services
             job.Steps ??= new();
             job.Checks ??= new();
             job.Issues ??= new();
+            job.Dispatches ??= new();
+            job.DispatchGroup ??= "";
             job.Steps.RemoveAll(s => s == null);
             job.Checks.RemoveAll(c => c == null);
             job.Issues.RemoveAll(i => i == null);
+            job.Dispatches.RemoveAll(d => d == null);
 
             if (job.Steps.Count == 0) job.Steps = DefaultSteps();
             var defaults = DefaultSteps();
@@ -293,7 +296,7 @@ namespace schedule.Services
             JsonSerializer.Deserialize<Job>(JsonSerializer.Serialize(job, CloneOptions), CloneOptions)!;
 
         /// <summary>
-        /// 「複製工令」：基本資料、人員、流程站別與檢驗項目留著，日期、完成狀態、檢驗結果、異常紀錄都清掉，
+        /// 「複製工令」：基本資料、人員、流程站別、檢驗項目與出料料件留著，日期、完成狀態、檢驗結果、異常紀錄、出料同步都清掉，
         /// 方便開同一機種的下一張工令。
         /// </summary>
         public static Job CopyAsNew(Job job)
@@ -319,6 +322,9 @@ namespace schedule.Services
                 c.Date = null;
             }
             copy.Issues = new();
+            // 出料的料件留著（同機種通常出一樣的料），出料日期清掉；同步要自己在新工令上勾
+            foreach (var d in copy.Dispatches) d.Date = null;
+            copy.DispatchGroup = "";
             return copy;
         }
 

@@ -261,6 +261,66 @@
                 </Trigger>
             </DataTemplate.Triggers>
         </DataTemplate>
+
+        <!-- ===== 出料紀錄的一列 ===== -->
+        <DataTemplate x:Key="DispatchTemplate">
+            <Border x:Name="Row" CornerRadius="10" Padding="8,5" Margin="0,0,0,4" Background="Transparent">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="32"/>
+                        <ColumnDefinition Width="150"/>
+                        <ColumnDefinition Width="160"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="64"/>
+                        <ColumnDefinition Width="84"/>
+                        <ColumnDefinition Width="128"/>
+                        <ColumnDefinition Width="0.6*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{Binding Number}" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource MutedBrush}"
+                               VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                    <views:SuggestBox x:Name="PartNoBox" Grid.Column="1" Style="{StaticResource RowSuggest}" Tag="PartNo" Loaded="Suggest_Loaded"
+                                      Text="{Binding PartNo, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="料號"
+                                      ToolTip="打之前出過的料號，名稱、規格、單位會自動帶入"/>
+                    <views:SuggestBox Grid.Column="2" Style="{StaticResource RowSuggest}" Tag="PartName" Loaded="Suggest_Loaded"
+                                      Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="名稱"/>
+                    <TextBox Grid.Column="3" Style="{StaticResource RowBox}" Text="{Binding Spec, UpdateSourceTrigger=PropertyChanged}"
+                             AutomationProperties.Name="規格"/>
+                    <TextBox Grid.Column="4" Style="{StaticResource RowBox}" Text="{Binding Quantity, UpdateSourceTrigger=PropertyChanged}"
+                             AutomationProperties.Name="數量" TextAlignment="Right"/>
+                    <views:SuggestBox Grid.Column="5" Style="{StaticResource RowSuggest}" Tag="Unit" Loaded="Suggest_Loaded"
+                                      Text="{Binding Unit, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="單位"/>
+                    <views:DateBox Grid.Column="6" Style="{StaticResource RowDate}" Text="{Binding DateText, UpdateSourceTrigger=PropertyChanged}"
+                                   AutomationProperties.Name="出料日期"/>
+                    <TextBox Grid.Column="7" Style="{StaticResource RowBox}" Text="{Binding Note, UpdateSourceTrigger=PropertyChanged}"
+                             AutomationProperties.Name="備註"/>
+                    <Button Grid.Column="8" Style="{StaticResource RowButton}" Content="&#xE74D;" Click="DispatchDelete_Click"
+                            ToolTip="刪除這個料件" AutomationProperties.Name="刪除"/>
+                </Grid>
+            </Border>
+            <DataTemplate.Triggers>
+                <Trigger SourceName="Row" Property="IsMouseOver" Value="True">
+                    <Setter TargetName="Row" Property="Background" Value="{DynamicResource HoverBrush}"/>
+                </Trigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
+        <!-- ===== 同步出料清單的一台 ===== -->
+        <DataTemplate x:Key="SyncTemplate">
+            <Border x:Name="Row" CornerRadius="10" Padding="8,6" Margin="0,0,0,2" Background="Transparent">
+                <CheckBox IsChecked="{Binding IsChecked}" VerticalContentAlignment="Top" AutomationProperties.Name="{Binding WorkOrder}">
+                    <StackPanel Margin="2,-1,0,0">
+                        <TextBlock Text="{Binding WorkOrder}" FontSize="13" FontWeight="SemiBold"/>
+                        <TextBlock Text="{Binding Detail}" FontSize="12" Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </CheckBox>
+            </Border>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsChecked}" Value="True">
+                    <Setter TargetName="Row" Property="Background" Value="{DynamicResource AccentSoftBrush}"/>
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
     </Window.Resources>
 
     <Grid Margin="24,18,24,16">
@@ -360,6 +420,12 @@
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="&#xE7BA;" Style="{StaticResource Icon}" FontSize="13" Margin="0,0,7,0"/>
                             <TextBlock x:Name="TabIssuesText" Text="異常 / 變更"/>
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton x:Name="TabDispatch" Style="{StaticResource SegmentTab}" GroupName="RunTab" Checked="Tab_Checked" AutomationProperties.Name="出料紀錄">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE7B8;" Style="{StaticResource Icon}" FontSize="13" Margin="0,0,7,0"/>
+                            <TextBlock x:Name="TabDispatchText" Text="出料紀錄"/>
                         </StackPanel>
                     </RadioButton>
                 </StackPanel>
@@ -515,6 +581,126 @@
                             </StackPanel>
                         </Button>
                     </StackPanel>
+                </Grid>
+
+                <!-- 出料紀錄：左邊料件，右邊勾選要同步的機台 -->
+                <Grid x:Name="DispatchPanel" Visibility="Collapsed">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="290"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <Border Background="{DynamicResource InputBgBrush}" CornerRadius="10" Padding="8,8" Margin="0,0,14,6">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="32"/>
+                                    <ColumnDefinition Width="150"/>
+                                    <ColumnDefinition Width="160"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="64"/>
+                                    <ColumnDefinition Width="84"/>
+                                    <ColumnDefinition Width="128"/>
+                                    <ColumnDefinition Width="0.6*"/>
+                                    <ColumnDefinition Width="30"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="序" Style="{StaticResource ColumnHeader}" HorizontalAlignment="Center"/>
+                                <TextBlock Grid.Column="1" Text="料號" Style="{StaticResource ColumnHeader}"/>
+                                <TextBlock Grid.Column="2" Text="名稱" Style="{StaticResource ColumnHeader}"/>
+                                <TextBlock Grid.Column="3" Text="規格" Style="{StaticResource ColumnHeader}"/>
+                                <TextBlock Grid.Column="4" Text="數量" Style="{StaticResource ColumnHeader}" HorizontalAlignment="Right"/>
+                                <TextBlock Grid.Column="5" Text="單位" Style="{StaticResource ColumnHeader}"/>
+                                <TextBlock Grid.Column="6" Text="出料日期" Style="{StaticResource ColumnHeader}"/>
+                                <TextBlock Grid.Column="7" Text="備註" Style="{StaticResource ColumnHeader}"/>
+                            </Grid>
+                        </Border>
+                        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                            <ItemsControl x:Name="DispatchList" ItemTemplate="{StaticResource DispatchTemplate}" Margin="0,0,8,0"/>
+                        </ScrollViewer>
+                        <TextBlock x:Name="DispatchEmpty" Grid.Row="1" Text="還沒有出料紀錄。按「新增料件」填料號、名稱、規格。"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource MutedBrush}"
+                                   IsHitTestVisible="False"/>
+                        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,10,0,0">
+                            <Button Style="{StaticResource GhostButton}" Click="AddDispatch_Click" AutomationProperties.Name="新增料件">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE710;" Style="{StaticResource Icon}" FontSize="12" Margin="0,0,8,0"/>
+                                    <TextBlock Text="新增料件"/>
+                                </StackPanel>
+                            </Button>
+                            <Button Style="{StaticResource GhostButton}" Click="DispatchToday_Click" Margin="6,0,0,0" AutomationProperties.Name="出料日期填今天"
+                                    ToolTip="還沒填出料日期的料件，全部填今天">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE787;" Style="{StaticResource Icon}" FontSize="12" Margin="0,0,8,0"/>
+                                    <TextBlock Text="空白的出料日期填今天"/>
+                                </StackPanel>
+                            </Button>
+                            <Button Style="{StaticResource GhostButton}" Click="PrintDispatch_Click" Margin="6,0,0,0" AutomationProperties.Name="列印出料單">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE749;" Style="{StaticResource Icon}" FontSize="12" Margin="0,0,8,0"/>
+                                    <TextBlock Text="列印出料單"/>
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- 同步出料 -->
+                    <Border Grid.Column="1" Background="{DynamicResource InputBgBrush}" CornerRadius="12" Padding="12" Margin="6,0,0,0">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <DockPanel>
+                                <TextBlock x:Name="SyncCount" DockPanel.Dock="Right" FontSize="12" Foreground="{DynamicResource AccentTextBrush}"
+                                           FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE895;" Style="{StaticResource Icon}" FontSize="13" Margin="0,0,7,0"
+                                               Foreground="{DynamicResource AccentBrush}"/>
+                                    <TextBlock Text="出料同步" FontSize="14" FontWeight="SemiBold"/>
+                                </StackPanel>
+                            </DockPanel>
+                            <TextBlock Grid.Row="1" FontSize="12" Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap" Margin="0,6,0,10"
+                                       Text="勾選的機台和這台用同一份出料紀錄：儲存時把這台的料件複製過去，之後在任何一台修改，其他台也會跟著改。"/>
+                            <Grid Grid.Row="2" Margin="0,0,0,8">
+                                <TextBox x:Name="SyncSearchBox" Padding="10,6" FontSize="13" TextChanged="SyncSearch_Changed"
+                                         AutomationProperties.Name="搜尋機台"/>
+                                <TextBlock Text="搜尋工令、機種、客戶" FontSize="13" Margin="12,0,0,0" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource SubtleBrush}" IsHitTestVisible="False">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Text, ElementName=SyncSearchBox}" Value="">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </Grid>
+                            <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto">
+                                <ItemsControl x:Name="SyncList" ItemTemplate="{StaticResource SyncTemplate}"/>
+                            </ScrollViewer>
+                            <TextBlock x:Name="SyncEmpty" Grid.Row="3" Text="沒有其他工令" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource MutedBrush}" IsHitTestVisible="False" Visibility="Collapsed"/>
+                            <StackPanel Grid.Row="4" Orientation="Horizontal" Margin="0,8,0,0">
+                                <Button Style="{StaticResource GhostButton}" Click="SyncSameModel_Click" AutomationProperties.Name="勾選同機種"
+                                        ToolTip="勾選還沒交貨、機種和這台相同的工令">
+                                    <TextBlock Text="勾選同機種"/>
+                                </Button>
+                                <Button Style="{StaticResource GhostButton}" Click="SyncNone_Click" Margin="6,0,0,0" AutomationProperties.Name="全部不同步">
+                                    <TextBlock Text="全部不勾"/>
+                                </Button>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
                 </Grid>
             </Grid>
         </Border>

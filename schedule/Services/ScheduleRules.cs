@@ -101,6 +101,7 @@ namespace schedule.Services
             return new[] { job.WorkOrder, job.Model, job.Customer, job.InnerWiring, job.OuterWiring, job.Consumables, job.Note,
                     job.ProjectName, job.OrderNo, job.DrawingNo, job.Sales, job.HoldReason }
                 .Concat((job.Issues ?? new()).SelectMany(i => new[] { i.Type, i.Description, i.Action }))
+                .Concat((job.Dispatches ?? new()).SelectMany(d => new[] { d.PartNo, d.Name, d.Spec }))
                 .Any(s => s.Contains(keyword, StringComparison.OrdinalIgnoreCase));
         }
 

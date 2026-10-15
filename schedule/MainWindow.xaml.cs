@@ -37,6 +37,7 @@ namespace schedule
             Width = Math.Min(Width, SystemParameters.WorkArea.Width - 20);
             _data = DataStore.Load();
             foreach (var job in _data.Jobs) RunCardRules.Ensure(job); // 舊資料補上預設的流程卡
+            DispatchSync.Normalize(_data.Jobs);
             InputHistory.Ensure(_data);
             foreach (var box in SuggestBoxes.Keys) box.ItemRemoved += OnSuggestionRemoved;
             UpdateSuggestions();
@@ -501,6 +502,8 @@ namespace schedule
                 job.Checks = copy.Checks;
                 job.Issues = editing != null ? copy.Issues : new();
                 job.HoldReason = editing != null ? copy.HoldReason : "";
+                job.Dispatches = copy.Dispatches;
+                job.DispatchGroup = editing != null ? copy.DispatchGroup : "";
             }
             RunCardRules.Ensure(job);
 
@@ -592,6 +595,7 @@ namespace schedule
             if (ok != MessageBoxResult.Yes) return;
 
             _data.Jobs.Remove(target);
+            DispatchSync.Normalize(_data.Jobs);
             ClearForm();
             Persist($"已刪除工令「{target.WorkOrder}」");
         }
@@ -633,17 +637,20 @@ namespace schedule
             }
 
             var people = InputHistory.Items(InputHistory.Ensure(_data), HistoryField.People).ToList();
-            var window = new Views.RunCardWindow(job, people) { Owner = this };
+            var window = new Views.RunCardWindow(job, people, _data.Jobs) { Owner = this };
             window.ShowDialog();
             if (window.Result is not { } updated) return;
 
             int index = _data.Jobs.IndexOf(job);
             if (index < 0) return;
             _data.Jobs[index] = updated;
+            // 出料同步：把這台的出料紀錄複製到勾選的機台
+            var synced = DispatchSync.Apply(_data.Jobs, updated, window.SyncIds);
             InputHistory.RememberRunCard(InputHistory.Ensure(_data), updated);
             _selected = updated;
             FillForm(updated);
-            Persist($"已儲存工令「{updated.WorkOrder}」的流程卡（{RunCardRules.ProgressText(updated)}）");
+            var syncText = synced.Count > 0 ? $"，出料紀錄已同步到 {string.Join("、", synced.Select(j => j.WorkOrder))}" : "";
+            Persist($"已儲存工令「{updated.WorkOrder}」的流程卡（{RunCardRules.ProgressText(updated)}）{syncText}");
         }
 
         private void PrintRunCard_Click(object sender, RoutedEventArgs e)
@@ -751,6 +758,8 @@ namespace schedule
 
             var (added, updated) = ScheduleRules.Merge(_data.Jobs, imported, replace: mode == MessageBoxResult.No, keep: result.KeepMissing);
             foreach (var job in _data.Jobs) RunCardRules.Ensure(job);
+            if (result.Sync.Count > 0) DispatchSync.ApplyNames(_data.Jobs, result.Sync);
+            DispatchSync.Normalize(_data.Jobs);
             // Excel 裡的值也加進下拉選單（第一列排最前面）
             var history = InputHistory.Ensure(_data);
             for (int i = imported.Count - 1; i >= 0; i--)

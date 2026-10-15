@@ -48,4 +48,16 @@ namespace schedule.Models
         public string Action { get; set; } = "";      // 處理對策
         public DateTime? Closed { get; set; }         // 結案日期；空白 = 還沒結案
     }
+
+    /// <summary>出料紀錄的一筆：這台機台出了哪個料。</summary>
+    public class DispatchItem
+    {
+        public string PartNo { get; set; } = "";      // 料號
+        public string Name { get; set; } = "";        // 名稱
+        public string Spec { get; set; } = "";        // 規格
+        public string Quantity { get; set; } = "";    // 數量（文字：2、1.5、一批都可以）
+        public string Unit { get; set; } = "";        // 單位
+        public DateTime? Date { get; set; }           // 出料日期
+        public string Note { get; set; } = "";
+    }
 }
