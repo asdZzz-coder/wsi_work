@@ -637,7 +637,7 @@ namespace schedule
             }
 
             var people = InputHistory.Items(InputHistory.Ensure(_data), HistoryField.People).ToList();
-            var window = new Views.RunCardWindow(job, people, _data.Jobs) { Owner = this };
+            var window = new Views.RunCardWindow(job, people, _data.Jobs, _data.Materials, SaveWarehouse) { Owner = this };
             window.ShowDialog();
             if (window.Result is not { } updated) return;
 
@@ -683,6 +683,28 @@ namespace schedule
             StatusText.Text = $"已複製「{source.WorkOrder}」的資料和流程，填好新的工令號碼與日期後按「新增」";
         }
 
+        // ---------- 大倉庫 ----------
+
+        private void Warehouse_Click(object sender, RoutedEventArgs e)
+        {
+            var window = new Views.MaterialWindow(_data.Materials, _data.Jobs, SaveWarehouse, pick: false) { Owner = this };
+            window.ShowDialog();
+        }
+
+        /// <summary>大倉庫改了（新增、修改、刪除、匯入物料）：存檔。</summary>
+        private void SaveWarehouse()
+        {
+            try
+            {
+                DataStore.Save(_data);
+                StatusText.Text = $"已更新大倉庫（{_data.Materials.Count} 項物料）";
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"儲存失敗，資料尚未寫入硬碟：{ex.Message}", "大倉庫", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
         private void Persist(string status)
         {
             try
@@ -712,9 +734,10 @@ namespace schedule
 
             try
             {
-                ExcelService.Export(_data.Jobs, dlg.FileName, DateTime.Today);
+                ExcelService.Export(_data.Jobs, dlg.FileName, DateTime.Today, _data.Materials);
                 StatusText.Text = "匯出完成";
-                MessageBox.Show($"匯出完成，共 {_data.Jobs.Count} 筆工令。", title);
+                var warehouse = _data.Materials.Count > 0 ? $"、大倉庫 {_data.Materials.Count} 項物料" : "";
+                MessageBox.Show($"匯出完成，共 {_data.Jobs.Count} 筆工令{warehouse}。", title);
             }
             catch (Exception ex)
             {
@@ -760,6 +783,14 @@ namespace schedule
             foreach (var job in _data.Jobs) RunCardRules.Ensure(job);
             if (result.Sync.Count > 0) DispatchSync.ApplyNames(_data.Jobs, result.Sync);
             DispatchSync.Normalize(_data.Jobs);
+            // 大倉庫：完全以 Excel 為準時整份換掉，合併時同料號的更新、其他新增
+            var materialText = "";
+            if (result.Materials is { } materials)
+            {
+                if (mode == MessageBoxResult.No) _data.Materials.Clear();
+                var (mAdded, mUpdated) = MaterialRules.Merge(_data.Materials, materials);
+                materialText = $"\n大倉庫：新增 {mAdded} 項、更新 {mUpdated} 項物料。";
+            }
             // Excel 裡的值也加進下拉選單（第一列排最前面）
             var history = InputHistory.Ensure(_data);
             for (int i = imported.Count - 1; i >= 0; i--)
@@ -770,7 +801,7 @@ namespace schedule
 
             ClearForm();
             Persist($"匯入完成，新增 {added} 筆、更新 {updated} 筆");
-            MessageBox.Show($"匯入完成，新增 {added} 筆、更新 {updated} 筆。", title);
+            MessageBox.Show($"匯入完成，新增 {added} 筆、更新 {updated} 筆。{materialText}", title);
         }
     }
 }

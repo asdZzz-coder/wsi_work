@@ -26,9 +26,12 @@ namespace schedule.Views
         private readonly ObservableCollection<DispatchRow> _dispatches;
         private readonly List<SyncRow> _syncRows;
         private readonly ICollectionView _syncView;
-        private readonly Dictionary<string, PartInfo> _catalog;
+        private Dictionary<string, PartInfo> _catalog = new();
         private readonly Dictionary<DispatchRow, PartInfo> _autoFilled = new();
-        private readonly IReadOnlyList<string> _partNos, _partNames, _units;
+        private IReadOnlyList<string> _partNos = Array.Empty<string>(), _partNames = Array.Empty<string>(), _units = Array.Empty<string>();
+        private readonly IReadOnlyList<Job> _allJobs;
+        private readonly List<Material> _materials;
+        private readonly Action _saveMaterials;
         private bool _dirty;
         private bool _loading = true;
         private bool _closingAfterSave;
@@ -41,10 +44,12 @@ namespace schedule.Views
         /// <summary>按「儲存」時勾選要同步出料的其他工令 Id。</summary>
         public List<string> SyncIds { get; private set; } = new();
 
-        public RunCardWindow(Job job, IReadOnlyList<string> people) : this(job, people, new[] { job }) { }
+        public RunCardWindow(Job job, IReadOnlyList<string> people) : this(job, people, new[] { job }, new List<Material>(), () => { }) { }
 
         /// <param name="allJobs">所有工令：出料同步的候選機台，以及料號、名稱的下拉選單。</param>
-        public RunCardWindow(Job job, IReadOnlyList<string> people, IReadOnlyList<Job> allJobs)
+        /// <param name="materials">大倉庫（「從大倉庫選料」用，選料時也可以修改倉庫）。</param>
+        /// <param name="saveMaterials">倉庫改了之後存檔。</param>
+        public RunCardWindow(Job job, IReadOnlyList<string> people, IReadOnlyList<Job> allJobs, List<Material> materials, Action saveMaterials)
         {
             InitializeComponent();
             // 小螢幕（例如筆電）上不要讓視窗超出可用範圍
@@ -70,10 +75,10 @@ namespace schedule.Views
             _dispatches = new ObservableCollection<DispatchRow>(work.Dispatches.Select(d => new DispatchRow(d)));
             Watch(_dispatches);
             DispatchList.ItemsSource = _dispatches;
-            _catalog = DispatchSync.Catalog(allJobs);
-            _partNos = DispatchSync.Values(allJobs, d => d.PartNo);
-            _partNames = DispatchSync.Values(allJobs, d => d.Name);
-            _units = DispatchSync.Values(allJobs, d => d.Unit).Concat(DefaultUnits).Distinct().ToList();
+            _allJobs = allJobs;
+            _materials = materials;
+            _saveMaterials = saveMaterials;
+            BuildSuggestions();
             var partners = DispatchSync.Partners(allJobs, job).Select(p => p.Id).ToHashSet();
             _syncRows = SyncCandidates(job, allJobs, partners);
             foreach (var row in _syncRows) row.PropertyChanged += Row_Changed;
@@ -368,6 +373,38 @@ namespace schedule.Views
             for (int i = 0; i < _steps.Count; i++) _steps[i].Number = i + 1;
             for (int i = 0; i < _checks.Count; i++) _checks[i].Number = i + 1;
             for (int i = 0; i < _dispatches.Count; i++) _dispatches[i].Number = i + 1;
+        }
+
+        /// <summary>料號自動帶入與下拉選單：大倉庫優先，再加上各工令出過的料。</summary>
+        private void BuildSuggestions()
+        {
+            _catalog = DispatchSync.Catalog(_allJobs);
+            foreach (var m in _materials.Where(m => m.PartNo.Trim().Length > 0))
+                _catalog[m.PartNo.Trim()] = new PartInfo(m.PartNo.Trim(), m.Name.Trim(), m.Spec.Trim(), m.Unit.Trim());
+            var sorted = MaterialRules.Sort(_materials).ToList();
+            static List<string> Merge(IEnumerable<string> first, IEnumerable<string> second) =>
+                first.Select(s => s.Trim()).Where(s => s.Length > 0).Concat(second).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            _partNos = Merge(sorted.Select(m => m.PartNo), DispatchSync.Values(_allJobs, d => d.PartNo));
+            _partNames = Merge(sorted.Select(m => m.Name), DispatchSync.Values(_allJobs, d => d.Name));
+            _units = Merge(_materials.Select(m => m.Unit), DispatchSync.Values(_allJobs, d => d.Unit)).Concat(DefaultUnits).Distinct().ToList();
+        }
+
+        private void PickMaterials_Click(object sender, RoutedEventArgs e)
+        {
+            var already = _dispatches.Select(d => d.PartNo);
+            var picker = new MaterialWindow(_materials, _allJobs, _saveMaterials, pick: true, already) { Owner = this };
+            picker.ShowDialog();
+            if (picker.WarehouseChanged) BuildSuggestions();
+            if (picker.Picked.Count == 0) return;
+
+            // 最後面的空白列先拿掉，再接上選到的料
+            while (_dispatches.LastOrDefault() is { IsEmpty: true } blank) _dispatches.Remove(blank);
+            foreach (var item in picker.Picked) _dispatches.Add(new DispatchRow(item));
+            Renumber();
+            if (_dispatches.LastOrDefault() is { } last) DispatchList.Dispatcher.BeginInvoke(() =>
+                (DispatchList.ItemContainerGenerator.ContainerFromItem(last) as FrameworkElement)?.BringIntoView(),
+                System.Windows.Threading.DispatcherPriority.Loaded);
+            StatusText.Text = $"已從大倉庫加入 {picker.Picked.Count} 項，按「儲存」才會存";
         }
 
         private void AddDispatch_Click(object sender, RoutedEventArgs e)

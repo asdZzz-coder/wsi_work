@@ -309,7 +309,7 @@
         <DataTemplate x:Key="SyncTemplate">
             <Border x:Name="Row" CornerRadius="10" Padding="8,6" Margin="0,0,0,2" Background="Transparent">
                 <CheckBox IsChecked="{Binding IsChecked}" VerticalContentAlignment="Top" AutomationProperties.Name="{Binding WorkOrder}">
-                    <StackPanel Margin="2,-1,0,0">
+                    <StackPanel Margin="2,-1,0,0" MaxWidth="200">
                         <TextBlock Text="{Binding WorkOrder}" FontSize="13" FontWeight="SemiBold"/>
                         <TextBlock Text="{Binding Detail}" FontSize="12" Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap"/>
                     </StackPanel>
@@ -621,10 +621,17 @@
                         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
                             <ItemsControl x:Name="DispatchList" ItemTemplate="{StaticResource DispatchTemplate}" Margin="0,0,8,0"/>
                         </ScrollViewer>
-                        <TextBlock x:Name="DispatchEmpty" Grid.Row="1" Text="還沒有出料紀錄。按「新增料件」填料號、名稱、規格。"
+                        <TextBlock x:Name="DispatchEmpty" Grid.Row="1" Text="還沒有出料紀錄。按「從大倉庫選料」勾選多項物料一次加入，或按「新增料件」自己填。"
                                    HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource MutedBrush}"
                                    IsHitTestVisible="False"/>
                         <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,10,0,0">
+                            <Button Style="{StaticResource PrimaryButton}" Click="PickMaterials_Click" Padding="14,8" Margin="0,0,6,0"
+                                    AutomationProperties.Name="從大倉庫選料" ToolTip="從大倉庫篩選、勾選多項物料，一次加入出料紀錄">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE7B8;" Style="{StaticResource Icon}" FontSize="12" Margin="0,0,8,0"/>
+                                    <TextBlock Text="從大倉庫選料"/>
+                                </StackPanel>
+                            </Button>
                             <Button Style="{StaticResource GhostButton}" Click="AddDispatch_Click" AutomationProperties.Name="新增料件">
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="&#xE710;" Style="{StaticResource Icon}" FontSize="12" Margin="0,0,8,0"/>

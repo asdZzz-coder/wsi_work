@@ -8,6 +8,9 @@ namespace schedule.Services
     public record ExcelImport(List<Job> Jobs, int Skipped, IReadOnlySet<string> Columns, bool HasSteps, bool HasChecks, bool HasIssues,
         bool HasDispatches = false)
     {
+        /// <summary>「大倉庫」工作表的物料；檔案沒有這張工作表時為 null。</summary>
+        public List<Material>? Materials { get; init; }
+
         /// <summary>「出料同步」欄寫的其他工令（檔案有這欄時，每張工令都有一筆，空白就是沒有同步）。</summary>
         public Dictionary<Job, List<string>> Sync { get; init; } = new();
 
@@ -39,6 +42,9 @@ namespace schedule.Services
         public const string CheckSheet = "品管檢驗";
         public const string IssueSheet = "異常紀錄";
         public const string DispatchSheet = "出料紀錄";
+        public const string MaterialSheet = "大倉庫";
+
+        private static readonly string[] MaterialHeaders = { "料號", "名稱", "規格", "單位", "分類", HNote };
 
         private const string HWorkOrder = "工令";
         private const string HModel = "機種";
@@ -108,8 +114,8 @@ namespace schedule.Services
 
         // ---------- 匯出 ----------
 
-        /// <summary>依預計交期排序匯出所有工令與流程卡。</summary>
-        public static void Export(IEnumerable<Job> jobs, string path, DateTime today)
+        /// <summary>依預計交期排序匯出所有工令與流程卡；有給 materials 時另外匯出「大倉庫」工作表。</summary>
+        public static void Export(IEnumerable<Job> jobs, string path, DateTime today, IEnumerable<Material>? materials = null)
         {
             var sorted = ScheduleRules.Sort(jobs, JobSort.DeliveryPlan).ToList();
             using var wb = new XLWorkbook();
@@ -217,7 +223,64 @@ namespace schedule.Services
                 }
             dispatches.Columns().AdjustToContents();
 
+            if (materials != null) AddMaterialSheet(wb, materials);
             wb.SaveAs(path);
+        }
+
+        /// <summary>只匯出大倉庫的物料。</summary>
+        public static void ExportMaterials(IEnumerable<Material> materials, string path)
+        {
+            using var wb = new XLWorkbook();
+            AddMaterialSheet(wb, materials);
+            wb.SaveAs(path);
+        }
+
+        private static void AddMaterialSheet(XLWorkbook wb, IEnumerable<Material> materials)
+        {
+            var ws = AddSheet(wb, MaterialSheet, MaterialHeaders);
+            int r = 2;
+            foreach (var m in MaterialRules.Sort(materials))
+            {
+                ws.Cell(r, 1).SetValue(Escape(m.PartNo));
+                ws.Cell(r, 2).SetValue(Escape(m.Name));
+                ws.Cell(r, 3).SetValue(Escape(m.Spec));
+                ws.Cell(r, 4).SetValue(Escape(m.Unit));
+                ws.Cell(r, 5).SetValue(Escape(m.Category));
+                ws.Cell(r, 6).SetValue(Escape(m.Note));
+                r++;
+            }
+            ws.Columns().AdjustToContents();
+        }
+
+        /// <summary>
+        /// 匯入物料：優先讀「大倉庫」工作表，沒有就讀第一張。依第一列的標題找欄位（料號 / 品號、名稱 / 品名、規格、單位、分類、備註）。
+        /// 沒有料號也沒有名稱的列略過。找不到任何看得懂的標題時回傳 null。
+        /// </summary>
+        public static List<Material>? ImportMaterials(string path)
+        {
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            using var wb = new XLWorkbook(stream);
+            if (!wb.Worksheets.TryGetWorksheet(MaterialSheet, out var ws)) ws = wb.Worksheets.FirstOrDefault();
+            return ws == null ? null : ReadMaterials(ws);
+        }
+
+        private static List<Material>? ReadMaterials(IXLWorksheet ws)
+        {
+            var fields = new Dictionary<int, string>();
+            foreach (var cell in ws.Row(1).CellsUsed())
+                if (MaterialRules.FieldOf(cell.GetFormattedString()) is { } field && !fields.ContainsValue(field))
+                    fields[cell.Address.ColumnNumber] = field;
+            if (!fields.ContainsValue("PartNo") && !fields.ContainsValue("Name")) return null;
+
+            var result = new List<Material>();
+            foreach (var row in ws.RowsUsed().Skip(1))
+            {
+                var m = new Material();
+                foreach (var (column, field) in fields) MaterialRules.Set(m, field, row.Cell(column).GetFormattedString());
+                if (m.PartNo.Length == 0 && m.Name.Length == 0) continue;
+                result.Add(m);
+            }
+            return result;
         }
 
         private static IXLWorksheet AddSheet(XLWorkbook wb, string name, string[] headers)
@@ -297,7 +360,11 @@ namespace schedule.Services
                 }
 
             return new ExcelImport(result, skipped, new HashSet<string>(col.Keys, StringComparer.OrdinalIgnoreCase), hasSteps, hasChecks, hasIssues,
-                hasDispatches) { Sync = sync };
+                hasDispatches)
+            {
+                Sync = sync,
+                Materials = wb.Worksheets.TryGetWorksheet(MaterialSheet, out var mws) ? ReadMaterials(mws) ?? new() : null,
+            };
         }
 
         private static Job? ReadRow(IXLRow row, Dictionary<string, int> col)

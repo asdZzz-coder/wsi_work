@@ -5,10 +5,13 @@ using schedule.Models;
 
 namespace schedule.Services
 {
-    /// <summary>存檔內容：所有工令。之後要加設定或其他清單時，加在這裡舊檔也讀得懂。</summary>
+    /// <summary>存檔內容：所有工令與大倉庫的物料。之後要加設定或其他清單時，加在這裡舊檔也讀得懂。</summary>
     public class ScheduleData
     {
         public List<Job> Jobs { get; set; } = new();
+
+        /// <summary>大倉庫：可以出料的物料清單。</summary>
+        public List<Material> Materials { get; set; } = new();
 
         /// <summary>表單下拉選單記住的輸入（null = 舊版資料，還沒建立過）。</summary>
         public InputHistoryData? History { get; set; }
@@ -46,6 +49,8 @@ namespace schedule.Services
             {
                 var data = JsonSerializer.Deserialize<ScheduleData>(File.ReadAllText(path), Options) ?? new();
                 data.Jobs.RemoveAll(j => j == null);
+                data.Materials ??= new();
+                data.Materials.RemoveAll(m => m == null);
                 return data;
             }
             catch (JsonException)
